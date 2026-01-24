@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;
@@ -7,6 +11,6 @@ html, body, #root {
 }
 
 body {
-  overflow: hidden; /* ensures no weird scroll box on mobile mock */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
-
