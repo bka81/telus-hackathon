@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useLayoutEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import landingBg from "../assets/images/landing.jpg";
 
 export default function Welcome() {
   const navigate = useNavigate();
 
-  const [focus, setFocus] = useState("Prepare for my doctor appointment");
+  const [focus, setFocus] = useState("");
   const [energy, setEnergy] = useState(70);
   const [sensory, setSensory] = useState(70);
 
@@ -13,17 +13,48 @@ export default function Welcome() {
   const energyLabel = useMemo(() => labelFromValue(energy), [energy]);
   const sensoryLabel = useMemo(() => labelFromValue(sensory), [sensory]);
 
+  // Auto-grow textarea
+  const textareaRef = useRef(null);
+
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    // Reset to allow shrink when deleting
+    el.style.height = "auto";
+
+    // Cap growth so layout stays stable (then textarea scrolls)
+    const maxPx = 200; // tweak if you want more/less growth
+    const next = Math.min(el.scrollHeight, maxPx);
+    el.style.height = `${next}px`;
+  };
+
+  useLayoutEffect(() => {
+    resizeTextarea();
+    // Keep it stable on orientation changes / address bar changes
+    const onResize = () => resizeTextarea();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Recompute height whenever focus changes
+  useLayoutEffect(() => {
+    resizeTextarea();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
   return (
-    <main className="welcome">
+    <main className="welcome" aria-label="Welcome page">
+      {/* Background */}
       <div
         className="welcome__bg"
         aria-hidden="true"
         style={{ backgroundImage: `url(${landingBg})` }}
       />
 
-      {/* This wrapper is the key: it becomes the "viewport" for centering */}
       <div className="welcome__viewport">
-        <section className="welcome__content" aria-label="Welcome">
+        <section className="welcome__content" aria-label="Welcome content">
           <header className="welcome__header">
             <div className="welcome__brandRow">
               <span className="welcome__leaf" aria-hidden="true">
@@ -45,19 +76,24 @@ export default function Welcome() {
           <div className="welcome__card" role="region" aria-label="Task helper">
             <h2 className="welcome__question">What would you like to focus on?</h2>
 
-            <label className="welcome__pill" aria-label="Focus input">
-              <input
-                className="welcome__input"
+            {/* Starts small, grows with content */}
+            <label className="welcome__pill welcome__pill--textarea" aria-label="Focus input">
+              <textarea
+                ref={textareaRef}
+                className="welcome__textarea"
                 value={focus}
                 onChange={(e) => setFocus(e.target.value)}
-                placeholder="Type a task…"
+                placeholder="Dump what's on your mind..."
+                rows={2} // starts small
               />
             </label>
 
             <div className="welcome__sliderBlock">
               <div className="welcome__sliderHeader">
                 <span className="welcome__sliderTitle">Energy level</span>
-                <span className="welcome__chip">{energyLabel}</span>
+                <span className="welcome__chip" aria-hidden="true">
+                  {energyLabel}
+                </span>
               </div>
 
               <input
@@ -79,7 +115,9 @@ export default function Welcome() {
             <div className="welcome__sliderBlock">
               <div className="welcome__sliderHeader">
                 <span className="welcome__sliderTitle">Sensory tolerance</span>
-                <span className="welcome__chip">{sensoryLabel}</span>
+                <span className="welcome__chip" aria-hidden="true">
+                  {sensoryLabel}
+                </span>
               </div>
 
               <input
@@ -103,9 +141,17 @@ export default function Welcome() {
               type="button"
               onClick={() =>
                 navigate("/breakdown", {
-                  state: { focus, energy, sensory },
+                  state: {
+                    focus: focus.trim(),
+                    energy,
+                    sensory,
+                    energyLabel,
+                    sensoryLabel,
+                  },
                 })
               }
+              disabled={!focus.trim()}
+              aria-disabled={!focus.trim()}
             >
               Break it down
             </button>
@@ -130,14 +176,15 @@ export default function Welcome() {
         *{ box-sizing: border-box; }
 
         .welcome{
-          position: relative;
+          position: fixed;
+          inset: 0;
           width: 100vw;
-          height: 100%;
+          height: 100svh;
           overflow: hidden;
         }
 
         .welcome__bg{
-          position: fixed;
+          position: absolute;
           inset: 0;
           background-size: cover;
           background-position: center;
@@ -146,45 +193,57 @@ export default function Welcome() {
           z-index: 0;
         }
 
-        /* KEY FIX:
-           Use a scrolling viewport wrapper and center inside it.
-           This avoids iOS toolbar weirdness with vh/dvh/svh entirely.
-        */
+        .welcome__bg::after{
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(
+            circle at 50% 55%,
+            rgba(255,255,255,0.08),
+            rgba(255,255,255,0.22)
+          );
+        }
+
         .welcome__viewport{
           position: relative;
           z-index: 1;
-
           height: 100%;
-          min-height: 100svh; /* stable "visible" height */
           width: 100%;
 
-          display: grid;
-          place-items: center;
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
 
-          padding-top: max(16px, env(safe-area-inset-top));
-          padding-bottom: max(16px, env(safe-area-inset-bottom));
-          padding-left: 18px;
-          padding-right: 18px;
+          padding:
+            max(10px, env(safe-area-inset-top))
+            18px
+            max(14px, env(safe-area-inset-bottom))
+            18px;
 
-          overflow-y: auto; /* allows safety if small screens */
+          overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
 
         .welcome__content{
           width: 100%;
-          max-width: 480px; /* keeps optical centering on phone */
-          text-align: center;
+          max-width: 480px;
+
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 16px;
+          text-align: center;
+
+          gap: 38px;
+          padding-top: 15px;
         }
+
+        .welcome__header{ margin-top: 0; }
 
         .welcome__brandRow{
           display: inline-flex;
           align-items: center;
           gap: 12px;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
 
         .welcome__leaf{
@@ -197,27 +256,28 @@ export default function Welcome() {
           margin: 0;
           font-weight: 800;
           letter-spacing: 0.2px;
-          font-size: clamp(30px, 4.2vh, 44px);
+          font-size: clamp(30px, 8vw, 44px);
           color: var(--ink);
         }
 
         .welcome__tagline{
+          margin-top: 13px;
           margin: 0;
-          font-size: clamp(18px, 2.6vh, 26px);
+          font-size: clamp(18px, 5vw, 26px);
           color: rgba(27,34,46,0.88);
           font-weight: 650;
         }
 
         .welcome__sub{
-          margin: 8px 0 0;
-          font-size: clamp(13px, 2.0vh, 18px);
+          margin: 6px 0 0;
+          font-size: clamp(13px, 3.8vw, 18px);
           line-height: 1.35;
           color: var(--muted);
         }
 
         .welcome__card{
           width: 100%;
-          max-width: 460px;   /* optical centering */
+          max-width: 460px;
           margin: 0 auto;
 
           border-radius: var(--radius);
@@ -232,7 +292,7 @@ export default function Welcome() {
 
         .welcome__question{
           margin: 0 0 12px;
-          font-size: clamp(16px, 2.2vh, 22px);
+          font-size: clamp(16px, 4.2vw, 22px);
           color: rgba(27,34,46,0.72);
           font-weight: 800;
         }
@@ -240,21 +300,35 @@ export default function Welcome() {
         .welcome__pill{
           display: block;
           width: 100%;
-          border-radius: 999px;
-          padding: 10px 12px;
+          border-radius: 18px;
+          padding: 12px;
           background: rgba(255,255,255,0.72);
           border: 1px solid rgba(142,172,205,0.35);
           box-shadow: 0 12px 24px rgba(27,34,46,0.10);
           margin-bottom: 12px;
         }
 
-        .welcome__input{
+        .welcome__textarea{
           width: 100%;
           border: none;
           outline: none;
+          resize: none;
+
           background: transparent;
-          font-size: 16px; /* prevent iOS focus-zoom */
+          font-size: 16px; /* prevents iOS focus-zoom */
+          line-height: 1.35;
           color: rgba(27,34,46,0.82);
+
+          /* Start small */
+          min-height: 44px;
+
+          /* Grow smoothly; once JS caps height, it scrolls */
+          overflow-y: auto;
+          transition: height 120ms ease;
+        }
+
+        .welcome__textarea::placeholder{
+          color: rgba(27,34,46,0.55);
         }
 
         .welcome__sliderBlock{
@@ -276,13 +350,7 @@ export default function Welcome() {
         }
 
         .welcome__chip{
-          font-size: 12px;
-          font-weight: 800;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: rgba(210,224,251,0.72);
-          border: 1px solid rgba(142,172,205,0.30);
-          color: rgba(27,34,46,0.68);
+          display: none;
         }
 
         .welcome__ends{
@@ -304,46 +372,37 @@ export default function Welcome() {
         }
 
         .welcome__range::-webkit-slider-runnable-track{
-          height: 10px;
-          border-radius: 999px;
-          background: linear-gradient(
-            90deg,
-            rgba(222,229,212,0.90),
-            rgba(254,249,217,0.90),
-            rgba(210,224,251,0.90)
-          );
-          border: 1px solid rgba(142,172,205,0.25);
+        height: 10px;
+        border-radius: 999px;
+        background-color: #dee5d4;
+        border: none;
         }
 
+
         .welcome__range::-webkit-slider-thumb{
-          -webkit-appearance: none;
-          appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: rgba(142,172,205,0.92);
-          border: 3px solid rgba(255,255,255,0.92);
-          box-shadow: 0 10px 18px rgba(27,34,46,0.14);
-          margin-top: -4px;
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.85);
+            border: 3px solid rgba(255,255,255,0.92);
+            box-shadow: 0 10px 18px rgba(27,34,46,0.14);
+            margin-top: -4px;
         }
 
         .welcome__range::-moz-range-track{
-          height: 10px;
-          border-radius: 999px;
-          background: linear-gradient(
-            90deg,
-            rgba(222,229,212,0.90),
-            rgba(254,249,217,0.90),
-            rgba(210,224,251,0.90)
-          );
-          border: 1px solid rgba(142,172,205,0.25);
+            height: 10px;
+            border-radius: 999px;
+            background-color: #dee5d4;
+            border: none;
         }
 
         .welcome__range::-moz-range-thumb{
           width: 18px;
           height: 18px;
           border-radius: 50%;
-          background: rgba(142,172,205,0.92);
+          background: rgba(0, 0, 0, 0.85);
           border: 3px solid rgba(255,255,255,0.92);
           box-shadow: 0 10px 18px rgba(27,34,46,0.14);
         }
@@ -354,12 +413,18 @@ export default function Welcome() {
           height: 54px;
           border: none;
           border-radius: 999px;
-          background: linear-gradient(180deg, rgba(142,172,205,0.92), rgba(110,140,180,0.92));
+          background: black;
           color: rgba(255,255,255,0.96);
           font-size: 17px;
           font-weight: 900;
           box-shadow: 0 18px 38px rgba(27,34,46,0.14);
           cursor: pointer;
+          opacity: 1;
+        }
+
+        .welcome__cta:disabled{
+          cursor: not-allowed;
+          opacity: 0.85;
         }
       `}</style>
     </main>
