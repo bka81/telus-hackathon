@@ -17,24 +17,24 @@ export default function Breakdown() {
       {/* PHONE */}
       <div className="relative w-full max-w-[390px] h-[780px] rounded-[2.5rem] overflow-hidden shadow-2xl">
         <Link
-  to="/"
-  className="
-    absolute
-    top-6
-    left-6
-    z-20
-    w-10
-    h-10
-    rounded-full
-    bg-white/90
-    flex
-    items-center
-    justify-center
-    shadow-md
-    text-slate-700
-    hover:bg-white
-    transition
-    active:scale-95
+      to="/"
+      className="
+      absolute
+      top-6
+      left-6
+      z-20
+      w-10
+      h-10
+      rounded-full
+      bg-white/90
+      flex
+      items-center
+      justify-center
+      shadow-md
+      text-slate-700
+      hover:bg-white
+      transition
+      active:scale-95
   "
   aria-label="Go back home"
 >
@@ -66,7 +66,7 @@ export default function Breakdown() {
           {/* HEADER */}
           <header className="pt-8 text-center">
             <h1 className="text-2xl font-semibold text-slate-800">
-              ClearDay
+              unlinear
             </h1>
           </header>
 
