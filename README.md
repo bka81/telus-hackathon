@@ -71,7 +71,7 @@ netlify dev
 ---
 
 ## Team
-Manjari Prasad
-Asmi Pahwa
-Widad Modak
-Beyzanur Kuyuk
+- Manjari Prasad
+- Asmi Pahwa
+- Widad Modak
+- Beyzanur Kuyuk
