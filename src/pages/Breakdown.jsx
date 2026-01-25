@@ -154,7 +154,7 @@ export default function Breakdown() {
     return cached ? safeParse(cached) : null;
   });
 
-  const headline = themes?.headline ?? "Here are the main areas I heard.";
+  const headline = themes?.headline ?? "Here are the main areas to tackle";
   const subhead = themes?.subhead ?? "Pick one to start. We’ll take it step by step.";
   const categories = Array.isArray(themes?.categories) ? themes.categories : [];
 
