@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import bgImage from "../assets/images/task-breakdown.jpg";
 
@@ -13,77 +13,25 @@ function safeParse(str) {
   }
 }
 
-// Helps if a function returns JSON wrapped in ```json ... ```
-function extractJson(text) {
-  if (typeof text !== "string") return null;
-
-  const trimmed = text.trim();
-
-  // If it's already JSON, parse directly
-  const direct = safeParse(trimmed);
-  if (direct) return direct;
-
-  // Try to strip fenced code blocks
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenceMatch?.[1]) {
-    return safeParse(fenceMatch[1].trim());
-  }
-
-  return null;
-}
-
 export default function Breakdown() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ Normalize intake: support {task,...} or accidental {focus,...}
+  // Intake: { task, energy, sensory }
   const intake = useMemo(() => {
-    const raw =
-      location.state && typeof location.state === "object"
-        ? location.state
-        : safeParse(localStorage.getItem(INTAKE_KEY));
-
-    if (!raw || typeof raw !== "object") return null;
-
-    const task = String(raw.task ?? raw.focus ?? "").trim();
-
-    // Expect strings low/medium/high; fallback safely
-    const energy =
-      typeof raw.energy === "string"
-        ? raw.energy
-        : typeof raw.energyLabel === "string"
-        ? raw.energyLabel
-        : "medium";
-
-    const sensory =
-      typeof raw.sensory === "string"
-        ? raw.sensory
-        : typeof raw.sensoryLabel === "string"
-        ? raw.sensoryLabel
-        : "medium";
-
-    return {
-      task,
-      energy: String(energy).toLowerCase(),
-      sensory: String(sensory).toLowerCase(),
-    };
+    if (location.state && typeof location.state === "object") return location.state;
+    const saved = localStorage.getItem(INTAKE_KEY);
+    return saved ? safeParse(saved) : null;
   }, [location.state]);
 
-  // ✅ Persist normalized intake for refresh safety
+  // Persist intake for refresh safety
   useEffect(() => {
-    if (intake?.task) {
-      localStorage.setItem(INTAKE_KEY, JSON.stringify(intake));
-      console.log("[Breakdown] saved intake:", intake);
-    } else {
-      console.log("[Breakdown] intake missing task. location.state:", location.state);
-      console.log("[Breakdown] INTAKE_KEY localStorage:", localStorage.getItem(INTAKE_KEY));
-    }
-  }, [intake, location.state]);
+    if (intake) localStorage.setItem(INTAKE_KEY, JSON.stringify(intake));
+  }, [intake]);
 
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState("");
-
   const [themes, setThemes] = useState(() => {
     const cached = localStorage.getItem(THEMES_KEY);
     return cached ? safeParse(cached) : null;
@@ -93,48 +41,37 @@ export default function Breakdown() {
   const subhead = themes?.subhead ?? "Pick one to start. We’ll take it step by step.";
   const categories = Array.isArray(themes?.categories) ? themes.categories : [];
 
-  // ✅ STRICTMODE FIX: prevent duplicate fetches in dev
-  const fetchedThemesKeyRef = useRef("");
+  // --- Fix React warning: depend on stable primitives, not the whole intake object
+  const task = intake?.task ?? "";
+  const energy = intake?.energy ?? "medium";
+  const sensory = intake?.sensory ?? "medium";
 
-  // ✅ Fetch 4 categories
   useEffect(() => {
-    if (!intake?.task) {
+    if (!task) {
       setLoading(false);
       setError("Missing your input. Please go back and try again.");
       return;
     }
 
-    const requestKey = `${intake.task}__${intake.energy}__${intake.sensory}`;
-    if (fetchedThemesKeyRef.current === requestKey) {
-      console.log("[Breakdown] skipping duplicate themes fetch (StrictMode):", requestKey);
-      return;
-    }
-    fetchedThemesKeyRef.current = requestKey;
-
     const run = async () => {
       setLoading(true);
       setError("");
 
-      console.log("[Breakdown] requesting themes for:", intake);
+      console.log("[Breakdown] fetching themes with:", { task, energy, sensory });
 
       try {
         const resp = await fetch("/.netlify/functions/themes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            task: intake.task,
-            energy: intake.energy || "medium",
-            sensory: intake.sensory || "medium",
-          }),
+          body: JSON.stringify({ task, energy, sensory }),
         });
 
         const text = await resp.text();
-        console.log("[Breakdown] themes raw response:", text);
-
         if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
 
-        const json = extractJson(text);
-        console.log("[Breakdown] themes parsed:", json);
+        const json = safeParse(text);
+
+        console.log("[Breakdown] themes response:", json);
 
         if (!json?.categories || !Array.isArray(json.categories) || json.categories.length !== 4) {
           throw new Error("Themes response invalid (expected exactly 4 categories).");
@@ -151,58 +88,56 @@ export default function Breakdown() {
     };
 
     run();
-  }, [intake?.task, intake?.energy, intake?.sensory]);
+  }, [task, energy, sensory]);
 
   const handlePick = async (category) => {
-    if (!intake?.task) return;
-
-    console.log("[Breakdown] picked category:", category);
+    if (!task) return;
 
     setPicking(true);
     setError("");
 
+    console.log("[Breakdown] picked category:", category);
+
     try {
-      // Scope the prompt to the chosen category
-      const scopedTask = `${intake.task}\n\nFocus category: ${category.title} — ${category.subtitle}`;
-      console.log("[Breakdown] requesting steps with scoped task:", scopedTask);
+      const scopedTask = `${task}\n\nFocus category: ${category.title}`;
+
+      console.log("[Breakdown] fetching breakdown with:", { scopedTask, energy, sensory });
 
       const resp = await fetch("/.netlify/functions/breakdown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           task: scopedTask,
-          energy: intake.energy || "medium",
-          sensory: intake.sensory || "medium",
+          energy,
+          sensory,
         }),
       });
 
       const text = await resp.text();
-      console.log("[Breakdown] steps raw response:", text);
-
       if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
 
-      const json = extractJson(text);
-      console.log("[Breakdown] steps parsed:", json);
+      const json = safeParse(text);
+
+      console.log("[Breakdown] breakdown response:", json);
 
       const steps = Array.isArray(json?.steps) ? json.steps : [];
-      const tasks = steps.map((s, idx) => ({
+
+      const tasksForFocus = steps.map((s, idx) => ({
         text: String(s?.title ?? `Step ${idx + 1}`),
         detail: String(s?.detail ?? ""),
       }));
 
-      console.log("[Breakdown] navigating to /focus with tasks:", tasks);
-
       navigate("/focus", {
         state: {
-          intake,
-          selectedCategory: category,
+          tasks: tasksForFocus,
           title: json?.title ?? category.title,
-          tasks,
           restSuggestion: json?.restSuggestion ?? null,
+          selectedCategory: category,
+          intake: { task, energy, sensory },
         },
       });
     } catch (e) {
-      console.error("[Breakdown] steps error:", e);
+      console.error("[Breakdown] breakdown error:", e);
       setError("Couldn’t create steps for that category. Please try another card.");
     } finally {
       setPicking(false);
@@ -210,97 +145,328 @@ export default function Breakdown() {
   };
 
   return (
-    <div
-      className="min-h-[100dvh] w-full overflow-x-hidden bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url(${bgImage})` }}
-    >
-      <div className="min-h-[100dvh] flex flex-col">
-        <nav className="px-6 py-6">
-          <Link
-            to="/"
-            aria-label="Go back"
-            className="w-10 h-10 bg-white/80 rounded-xl flex items-center justify-center shadow"
-          >
-            ←
-          </Link>
-        </nav>
+    <main className="bd" aria-label="Breakdown page">
+      {/* Background like Welcome */}
+      <div
+        className="bd__bg"
+        aria-hidden="true"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      />
 
-        <main className="flex flex-col flex-1 px-4">
-          <header className="mb-6 text-center">
-            <h1 className="text-xl font-bold text-slate-900">{headline}</h1>
-            <p className="text-sm text-slate-700/70 mt-2">{subhead}</p>
+      <div className="bd__viewport">
+        <div className="bd__content">
+          <nav className="bd__nav">
+            <Link to="/" aria-label="Go back" className="bd__back">
+              ←
+            </Link>
+          </nav>
+
+          <header className="bd__header">
+            <h1 className="bd__title">{headline}</h1>
+            <p className="bd__sub">{subhead}</p>
           </header>
 
-          <div className="flex-grow">
-            <div className="bg-white/70 backdrop-blur rounded-[2rem] px-5 py-5">
-              {loading ? (
-                <div className="grid grid-cols-2 gap-4">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-28 rounded-2xl bg-white/80 shadow-sm animate-pulse"
-                    />
+          <section className="bd__panel" aria-label="Categories">
+            {loading ? (
+              <div className="bd__grid">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="bd__skeleton" />
+                ))}
+              </div>
+            ) : error ? (
+              <div className="bd__error">
+                <p className="bd__errorText">{error}</p>
+                <Link to="/" className="bd__errorBtn">
+                  Back
+                </Link>
+              </div>
+            ) : (
+              <>
+                {picking && <div className="bd__status">Creating steps…</div>}
+
+                <div className="bd__grid">
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={picking}
+                      onClick={() => handlePick(c)}
+                      className="bd__card"
+                    >
+                      <div className="bd__icon" aria-hidden="true" />
+                      <div className="bd__cardTitle">{c.title}</div>
+
+                      <div className="bd__pill">
+                        {c.stepsCount} steps
+                      </div>
+
+                      <div className="bd__arrow" aria-hidden="true">
+                        →
+                      </div>
+                    </button>
                   ))}
                 </div>
-              ) : error ? (
-                <div className="text-slate-700">
-                  <p className="mb-4">{error}</p>
-                  <Link
-                    to="/"
-                    className="inline-block bg-slate-900 text-white px-4 py-2 rounded-xl"
-                  >
-                    Back
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  {picking && (
-                    <div className="mb-4 text-sm text-slate-700/80">
-                      Creating steps…
-                    </div>
-                  )}
+              </>
+            )}
+          </section>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    {categories.map((c, idx) => (
-                      <button
-                        key={c.id ?? `${c.title}-${idx}`}
-                        type="button"
-                        disabled={picking}
-                        onClick={() => handlePick(c)}
-                        className="rounded-2xl bg-white/85 shadow-sm p-4 text-left hover:bg-white transition disabled:opacity-70"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-semibold text-slate-900 leading-snug">
-                              {c.title}
-                            </div>
-                            <div className="text-xs text-slate-700/70 mt-1">
-                              {c.subtitle}
-                            </div>
-                          </div>
-                          <div className="h-6 w-6 rounded-full bg-slate-200/70 flex items-center justify-center text-slate-700 text-sm">
-                            →
-                          </div>
-                        </div>
-
-                        <div className="mt-3 inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-xs text-slate-700">
-                          {c.stepsCount} steps
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="pt-6 pb-10">
-            <div className="text-center text-xs text-slate-700/60">
-              Choose one card to begin.
-            </div>
-          </div>
-        </main>
+          <footer className="bd__footer">
+            <div className="bd__hint">Choose one card to begin.</div>
+          </footer>
+        </div>
       </div>
-    </div>
+
+      <style>{`
+        * { box-sizing: border-box; }
+
+        .bd{
+          position: fixed;
+          inset: 0;
+          width: 100vw;
+          height: 100svh;
+          overflow: hidden;
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        }
+
+        /* Background: same behavior as Welcome */
+        .bd__bg{
+          position: absolute;
+          inset: 0;
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          transform: scale(1.01);
+          z-index: 0;
+        }
+
+        .bd__bg::after{
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(
+            circle at 50% 55%,
+            rgba(255,255,255,0.10),
+            rgba(255,255,255,0.30)
+          );
+        }
+
+        .bd__viewport{
+          position: relative;
+          z-index: 1;
+          height: 100%;
+          width: 100%;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+
+          padding:
+            max(10px, env(safe-area-inset-top))
+            18px
+            max(14px, env(safe-area-inset-bottom))
+            18px;
+        }
+
+        .bd__content{
+          width: 100%;
+          max-width: 480px;
+          padding-top: 10px;
+        }
+
+        .bd__nav{
+          display: flex;
+          justify-content: center;
+          margin-bottom: 8px;
+        }
+
+        .bd__back{
+          width: 44px;
+          height: 44px;
+          border-radius: 14px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,0.70);
+          border: 1px solid rgba(255,255,255,0.75);
+          box-shadow: 0 10px 25px rgba(27,34,46,0.10);
+          text-decoration: none;
+          color: rgba(27,34,46,0.85);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+        }
+
+        .bd__header{
+          text-align: center;
+          margin: 14px 0 16px;
+          padding: 0 8px;
+        }
+
+        /* Lighter typography */
+        .bd__title{
+          margin: 0;
+          font-size: 22px;
+          font-weight: 650;
+          color: rgba(27,34,46,0.86);
+          letter-spacing: 0.1px;
+        }
+
+        .bd__sub{
+          margin: 8px 0 0;
+          font-size: 13px;
+          font-weight: 500;
+          color: rgba(27,34,46,0.55);
+          line-height: 1.35;
+        }
+
+        /* Single soft panel (no extra nested boxes) */
+        .bd__panel{
+          border-radius: 28px;
+          background: rgba(255,255,255,0.40);
+          border: 1px solid rgba(255,255,255,0.55);
+          box-shadow: 0 22px 70px rgba(27,34,46,0.10);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          padding: 16px;
+        }
+
+        .bd__status{
+          font-size: 12px;
+          color: rgba(27,34,46,0.55);
+          margin-bottom: 10px;
+          text-align: center;
+        }
+
+        .bd__grid{
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+
+        .bd__skeleton{
+          height: 132px;
+          border-radius: 24px;
+          background: rgba(255,255,255,0.55);
+          border: 1px solid rgba(255,255,255,0.70);
+          box-shadow: 0 10px 20px rgba(27,34,46,0.06);
+          animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse{
+          0%,100%{ opacity: 0.85; }
+          50%{ opacity: 0.55; }
+        }
+
+        .bd__card{
+          position: relative;
+          height: 132px;
+          border-radius: 24px;
+          background: rgba(255,255,255,0.62);
+          border: 1px solid rgba(255,255,255,0.75);
+          box-shadow: 0 14px 28px rgba(27,34,46,0.10);
+          padding: 14px;
+          text-align: left;
+          cursor: pointer;
+
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          gap: 10px;
+
+          transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+        }
+
+        .bd__card:hover{
+          transform: translateY(-2px);
+          box-shadow: 0 18px 34px rgba(27,34,46,0.12);
+          background: rgba(255,255,255,0.72);
+        }
+
+        .bd__card:disabled{
+          opacity: 0.75;
+          cursor: not-allowed;
+        }
+
+        /* Placeholder for your friend’s icons */
+        .bd__icon{
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          width: 34px;
+          height: 34px;
+          border-radius: 14px;
+          background: rgba(142,172,205,0.20);
+          border: 1px solid rgba(142,172,205,0.28);
+        }
+
+        .bd__arrow{
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          width: 26px;
+          height: 26px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.75);
+          border: 1px solid rgba(255,255,255,0.85);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: rgba(27,34,46,0.55);
+          font-weight: 700;
+        }
+
+        .bd__cardTitle{
+          font-size: 15px;
+          font-weight: 650;
+          color: rgba(27,34,46,0.82);
+          line-height: 1.15;
+          padding-right: 18px;
+        }
+
+        .bd__pill{
+          align-self: flex-start;
+          font-size: 12px;
+          font-weight: 600;
+          color: rgba(27,34,46,0.62);
+          background: rgba(255,255,255,0.70);
+          border: 1px solid rgba(255,255,255,0.80);
+          padding: 6px 10px;
+          border-radius: 999px;
+        }
+
+        .bd__error{
+          text-align: center;
+          padding: 18px 10px;
+        }
+
+        .bd__errorText{
+          margin: 0 0 12px;
+          color: rgba(27,34,46,0.70);
+          font-size: 14px;
+        }
+
+        .bd__errorBtn{
+          display: inline-block;
+          padding: 10px 14px;
+          border-radius: 14px;
+          background: rgba(27,34,46,0.85);
+          color: white;
+          text-decoration: none;
+          font-weight: 700;
+          font-size: 13px;
+        }
+
+        .bd__footer{
+          padding: 14px 0 18px;
+          text-align: center;
+        }
+
+        .bd__hint{
+          font-size: 12px;
+          color: rgba(27,34,46,0.55);
+        }
+      `}</style>
+    </main>
   );
 }
