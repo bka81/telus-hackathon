@@ -25,7 +25,7 @@ When someone is overwhelmed, task initiation and decision-making become the hard
 
 ## Built with
 - **React** (mobile-first UI)
-- **Tailwind CSS**
+- **CSS**
 - **React Router**
 - **Netlify Functions** (serverless AI calls; keeps API keys off the client)
 - **Node.js + npm**
