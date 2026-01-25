@@ -3,25 +3,25 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import bgImage from "../assets/images/task-breakdown.jpg";
 
 // 19 icons
-import icon01Checklist from "../assets/images/01_clipboard_checklist.png";
-import icon02Bulb from "../assets/images/02_lightbulb_idea_dark.png";
-import icon03Home from "../assets/images/03_home.png";
-import icon04Bed from "../assets/images/04_sleep_bed.png";
-import icon05Heart from "../assets/images/05_health_heart.png";
-import icon06Plant from "../assets/images/06_plant_growth.png";
-import icon07Mail from "../assets/images/07_mail_envelope.png";
-import icon08Calendar from "../assets/images/08_calendar_check.png";
-import icon09Dumbbell from "../assets/images/09_dumbbell_fitness.png";
-import icon10Food from "../assets/images/10_food_plate.png";
-import icon11Bags from "../assets/images/11_shopping_bags.png";
-import icon12Briefcase from "../assets/images/12_briefcase.png";
-import icon13Target from "../assets/images/13_target.png";
-import icon14Decisions from "../assets/images/14_decisions.png";
-import icon15Money from "../assets/images/15_money.png";
-import icon16Computers from "../assets/images/16_computers.png";
-import icon17Connection from "../assets/images/17_connection.png";
-import icon18Study from "../assets/images/18_study.png";
-import icon19Misc from "../assets/images/19_misc.png";
+import iconChecklist from "../assets/images/01_clipboard_checklist.png";
+import iconBulb from "../assets/images/02_lightbulb_idea_dark.png";
+import iconHome from "../assets/images/03_home.png";
+import iconBed from "../assets/images/04_sleep_bed.png";
+import iconHeart from "../assets/images/05_health_heart.png";
+import iconPlant from "../assets/images/06_plant_growth.png";
+import iconMail from "../assets/images/07_mail_envelope.png";
+import iconCalendar from "../assets/images/08_calendar_check.png";
+import iconDumbbell from "../assets/images/09_dumbbell_fitness.png";
+import iconFood from "../assets/images/10_food_plate.png";
+import iconBags from "../assets/images/11_shopping_bags.png";
+import iconBriefcase from "../assets/images/12_briefcase.png";
+import iconTarget from "../assets/images/13_target.png";
+import iconDecisions from "../assets/images/14_decisions.png";
+import iconMoney from "../assets/images/15_money.png";
+import iconComputers from "../assets/images/16_computers.png";
+import iconConnection from "../assets/images/17_connection.png";
+import iconStudy from "../assets/images/18_study.png";
+import iconMisc from "../assets/images/19_misc.png";
 
 const INTAKE_KEY = "lastIntake_v1";
 const THEMES_KEY = "lastThemes_v1";
@@ -37,33 +37,33 @@ function safeParse(str) {
 
 // Stable id -> icon (best match for your 4 AI categories)
 const ICON_BY_ID = {
-  focus_now: icon13Target,
-  decisions: icon14Decisions,
-  money_finance: icon15Money,
-  digital_admin: icon16Computers,
+  focus_now: iconTarget,
+  decisions: iconDecisions,
+  money_finance: iconMoney,
+  digital_admin: iconComputers,
 };
 
 // Keyword rules for “title-based” icon matching (fallbacks / future expansion)
 const KEYWORD_RULES = [
-  { keys: ["plan", "planning", "outline", "steps", "checklist"], icon: icon01Checklist },
-  { keys: ["idea", "brainstorm", "think", "concept"], icon: icon02Bulb },
-  { keys: ["home", "house", "clean", "laundry"], icon: icon03Home },
-  { keys: ["sleep", "rest", "break", "tired"], icon: icon04Bed },
-  { keys: ["health", "doctor", "medical", "med", "pain"], icon: icon05Heart },
-  { keys: ["growth", "self care", "selfcare", "habit"], icon: icon06Plant },
-  { keys: ["email", "message", "text", "call", "reply", "communicate"], icon: icon07Mail },
-  { keys: ["schedule", "calendar", "appointment", "deadline"], icon: icon08Calendar },
-  { keys: ["workout", "gym", "exercise", "fitness", "walk", "run"], icon: icon09Dumbbell },
-  { keys: ["food", "cook", "meal", "eat", "grocery"], icon: icon10Food },
-  { keys: ["shop", "buy", "order", "errand", "pickup"], icon: icon11Bags },
-  { keys: ["job", "career", "travel", "office", "work"], icon: icon12Briefcase },
-  { keys: ["focus", "urgent", "now", "today", "asap"], icon: icon13Target },
-  { keys: ["decide", "decision", "choose", "option"], icon: icon14Decisions },
-  { keys: ["money", "budget", "pay", "bill", "finance", "cost"], icon: icon15Money },
-  { keys: ["computer", "digital", "admin", "form", "login", "account", "settings"], icon: icon16Computers },
-  { keys: ["friends", "family", "relationship", "social", "connect"], icon: icon17Connection },
-  { keys: ["study", "learn", "homework", "quiz", "exam"], icon: icon18Study },
-  { keys: ["misc", "other", "random", "anything"], icon: icon19Misc },
+  { keys: ["plan", "planning", "outline", "steps", "checklist"], icon: iconChecklist },
+  { keys: ["idea", "brainstorm", "think", "concept"], icon: iconBulb },
+  { keys: ["home", "house", "clean", "laundry"], icon: iconHome },
+  { keys: ["sleep", "rest", "break", "tired"], icon: iconBed },
+  { keys: ["health", "doctor", "medical", "med", "pain"], icon: iconHeart },
+  { keys: ["growth", "self care", "selfcare", "habit"], icon: iconPlant },
+  { keys: ["email", "message", "text", "call", "reply", "communicate"], icon: iconMail },
+  { keys: ["schedule", "calendar", "appointment", "deadline"], icon: iconCalendar },
+  { keys: ["workout", "gym", "exercise", "fitness", "walk", "run"], icon: iconDumbbell },
+  { keys: ["food", "cook", "meal", "eat", "grocery"], icon: iconFood },
+  { keys: ["shop", "buy", "order", "errand", "pickup"], icon: iconBags },
+  { keys: ["job", "career", "travel", "office", "work"], icon: iconBriefcase },
+  { keys: ["focus", "urgent", "now", "today", "asap"], icon: iconTarget },
+  { keys: ["decide", "decision", "choose", "option"], icon: iconDecisions },
+  { keys: ["money", "budget", "pay", "bill", "finance", "cost"], icon: iconMoney },
+  { keys: ["computer", "digital", "admin", "form", "login", "account", "settings"], icon: iconComputers },
+  { keys: ["friends", "family", "relationship", "social", "connect"], icon: iconConnection },
+  { keys: ["study", "learn", "homework", "quiz", "exam"], icon: iconStudy },
+  { keys: ["misc", "other", "random", "anything"], icon: iconMisc },
 ];
 
 function pickIcon(category, index = 0) {
@@ -76,8 +76,8 @@ function pickIcon(category, index = 0) {
   }
 
   // deterministic fallback
-  const fallback = [icon13Target, icon14Decisions, icon15Money, icon16Computers];
-  return fallback[index] || icon19Misc;
+  const fallback = [iconTarget, iconDecisions, iconMoney, iconComputers];
+  return fallback[index] || iconMisc;
 }
 
 export default function Breakdown() {
