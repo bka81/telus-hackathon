@@ -11,20 +11,22 @@ export default function Focus() {
     return Array.isArray(t) ? t : [];
   }, [location.state]);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showDetail, setShowDetail] = useState(false);
-  const [isWiggling, setIsWiggling] = useState(false);
-
-  const displayTasks =
+  // Initializing state with tasks
+  const [dynamicTasks, setDynamicTasks] = useState(() => 
     tasksFromState.length > 0
       ? tasksFromState
       : [
           { text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy." },
           { text: "Write down symptoms", detail: "Note when they started and any triggers you noticed." },
           { text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step." },
-        ];
+        ]
+  );
 
-  const currentTask = displayTasks[currentIndex];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [showDetail, setShowDetail] = useState(false);
+  const [isWiggling, setIsWiggling] = useState(false);
+
+  const currentTask = dynamicTasks[currentIndex];
 
   useEffect(() => {
     setIsWiggling(true);
@@ -34,14 +36,27 @@ export default function Focus() {
 
   const handleNext = () => {
     setShowDetail(false);
-    if (currentIndex < displayTasks.length - 1) {
+    if (currentIndex < dynamicTasks.length - 1) {
       setCurrentIndex((v) => v + 1);
     } else {
       navigate("/reflect");
     }
   };
 
-  const progress = ((currentIndex + 1) / displayTasks.length) * 100;
+  // ✅ LOGIC: Push a copy to the end and move to the next index
+  const handleComeBackLater = () => {
+    setShowDetail(false);
+    
+    const taskToMove = dynamicTasks[currentIndex];
+    
+    // Add the current task to the end of the list
+    setDynamicTasks(prev => [...prev, taskToMove]);
+    
+    // Increment the index so the UI shows "Step 2", "Step 3", etc.
+    setCurrentIndex((v) => v + 1);
+  };
+
+  const progress = ((currentIndex + 1) / dynamicTasks.length) * 100;
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center font-sans overflow-hidden">
@@ -65,7 +80,7 @@ export default function Focus() {
 
         <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
           <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-sm">
-            Step {currentIndex + 1} of {displayTasks.length}
+            Step {currentIndex + 1} of {dynamicTasks.length}
           </p>
 
           <div className="space-y-4">
@@ -98,13 +113,23 @@ export default function Focus() {
             )}
           </div>
 
-          <button
-            onClick={handleNext}
-            className="w-full py-5 bg-[#DEE5D4] text-slate-700 rounded-full font-bold text-xl shadow-lg hover:bg-[#ced9c1] transition-transform active:scale-95"
-            type="button"
-          >
-            {currentIndex === displayTasks.length - 1 ? "Finish & Reflect" : "Done →"}
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleNext}
+              className="w-full py-5 bg-[#DEE5D4] text-slate-700 rounded-full font-bold text-xl shadow-lg hover:bg-[#ced9c1] transition-transform active:scale-95"
+              type="button"
+            >
+              {currentIndex === dynamicTasks.length - 1 ? "Finish & Reflect" : "Done →"}
+            </button>
+
+            <button
+              onClick={handleComeBackLater}
+              className="text-slate-400 text-xs font-bold uppercase tracking-widest hover:text-slate-600 transition-colors"
+              type="button"
+            >
+              ↻ Come back to this later
+            </button>
+          </div>
         </div>
 
         <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">
