@@ -65,7 +65,7 @@ Make EXACTLY 4 calm categories. Each category needs:
 
 Return exactly:
 {
-  "headline":"Here are the main areas I heard.",
+  "headline":"Your main focus areas.",
   "subhead":"Pick one to start. We’ll take it step by step.",
   "categories":[
     {"id":"string","title":"string","subtitle":"string","stepsCount":number,"iconKey":"${iconKeys}"}
@@ -124,7 +124,7 @@ Return exactly:
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        headline: String(parsed.headline ?? "Here are the main areas I heard."),
+        headline: String(parsed.headline ?? "Your main focus areas."),
         subhead: String(parsed.subhead ?? "Pick one to start. We’ll take it step by step."),
         categories: normalized,
       }),

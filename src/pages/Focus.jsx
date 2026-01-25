@@ -2,44 +2,144 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import focusBg from "../assets/images/focus-mode.jpg";
 
+const PROGRESS_KEY = "lastProgress_v1";
+
+function safeParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+}
+
+function loadProgress(sig) {
+  const all = safeParse(localStorage.getItem(PROGRESS_KEY)) || {};
+  return all?.[sig] || null;
+}
+
+function saveProgress(sig, next) {
+  const all = safeParse(localStorage.getItem(PROGRESS_KEY)) || {};
+  all[sig] = next;
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+}
+
+function countDone(tasks) {
+  return tasks.reduce((n, t) => n + (t?.done ? 1 : 0), 0);
+}
+
+function firstTodoIndex(tasks) {
+  const i = tasks.findIndex((t) => !t?.done);
+  return i === -1 ? Math.max(0, tasks.length - 1) : i;
+}
+
+function normalizeTasks(arr) {
+  const base = Array.isArray(arr) ? arr : [];
+  return base.map((t, idx) => ({
+    id: String(t?.id ?? `s_${idx + 1}`),
+    text: String(t?.text ?? ""),
+    detail: String(t?.detail ?? ""),
+    done: !!t?.done,
+  }));
+}
+
 export default function Focus() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const tasksFromState = useMemo(() => {
-    const t = location.state?.tasks;
-    return Array.isArray(t) ? t : [];
+  const sigFromState = useMemo(() => {
+    const s = location.state?.sig;
+    return typeof s === "string" ? s : null;
   }, [location.state]);
+
+  const selectedCategory = useMemo(() => location.state?.selectedCategory || null, [location.state]);
 
   const titleFromState = useMemo(() => {
     const t = location.state?.title;
     return typeof t === "string" ? t : "";
   }, [location.state]);
 
+  const tasksFromState = useMemo(() => {
+    const t = location.state?.tasks;
+    return Array.isArray(t) ? t : [];
+  }, [location.state]);
+
   const fallbackTasks = useMemo(
     () => [
-      { text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy." },
-      { text: "Write down symptoms", detail: "Note when they started and any triggers you noticed." },
-      { text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step." },
+      { id: "s_1", text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy.", done: false },
+      { id: "s_2", text: "Write down symptoms", detail: "Note when they started and any triggers you noticed.", done: false },
+      { id: "s_3", text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step.", done: false },
     ],
     []
   );
 
-  const [dynamicTasks, setDynamicTasks] = useState(() =>
-    tasksFromState.length > 0 ? tasksFromState : fallbackTasks
-  );
+  // Load tasks with priority:
+  // 1) saved tasks for this category (resume)
+  // 2) tasks passed from Breakdown route state (fresh)
+  // 3) fallback
+  const initialTasks = useMemo(() => {
+    const catId = String(selectedCategory?.id || "");
+    if (sigFromState && catId) {
+      const p = loadProgress(sigFromState);
+      const saved = p?.perCategory?.[catId]?.tasks;
+      if (Array.isArray(saved) && saved.length > 0) return normalizeTasks(saved);
+    }
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+    if (tasksFromState.length > 0) return normalizeTasks(tasksFromState);
+    return normalizeTasks(fallbackTasks);
+  }, [sigFromState, selectedCategory?.id, tasksFromState, fallbackTasks]);
+
+  const [dynamicTasks, setDynamicTasks] = useState(initialTasks);
+  const [currentIndex, setCurrentIndex] = useState(() => firstTodoIndex(initialTasks));
   const [showDetail, setShowDetail] = useState(false);
   const [isWiggling, setIsWiggling] = useState(false);
 
-  // ✅ KEY FIX: when you navigate to /focus with new state, update tasks + reset progress
+  // Persist category progress (including full task list) to localStorage
+  const persistCategory = (nextTasks, overrides = {}) => {
+    if (!sigFromState || !selectedCategory?.id) return;
+
+    const catId = String(selectedCategory.id);
+    const doneSteps = countDone(nextTasks);
+    const totalSteps = Number(selectedCategory?.stepsCount) || nextTasks.length;
+
+    const current = loadProgress(sigFromState) || { completedSteps: 0, totalSteps: 0, perCategory: {} };
+    if (!current.perCategory) current.perCategory = {};
+
+    const prev = current.perCategory[catId] || {};
+    const nextStatus =
+      overrides.status ||
+      (doneSteps >= nextTasks.length ? "completed" : prev.status || "active");
+
+    current.perCategory[catId] = {
+      doneSteps,
+      totalSteps,
+      status: nextStatus,
+      tasks: nextTasks,
+      title: overrides.title ?? prev.title ?? titleFromState ?? String(selectedCategory?.title || ""),
+      restSuggestion: overrides.restSuggestion ?? prev.restSuggestion ?? null,
+    };
+
+    // recompute global completedSteps from perCategory
+    current.completedSteps = Object.values(current.perCategory).reduce(
+      (sum, v) => sum + Number(v?.doneSteps || 0),
+      0
+    );
+
+    saveProgress(sigFromState, current);
+  };
+
+  // If user navigates to Focus with a DIFFERENT category, reload properly.
+  // IMPORTANT: We do NOT reset just because you came back from Breakdown;
+  // we prefer saved tasks for this category and keep them.
   useEffect(() => {
-    const next = tasksFromState.length > 0 ? tasksFromState : fallbackTasks;
+    const next = initialTasks;
     setDynamicTasks(next);
-    setCurrentIndex(0);
+    setCurrentIndex(firstTodoIndex(next));
     setShowDetail(false);
-  }, [tasksFromState, fallbackTasks, location.key]);
+
+    // Ensure storage has an entry (so resume works even if they quit immediately)
+    persistCategory(next, {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   const currentTask = dynamicTasks[currentIndex];
 
@@ -49,24 +149,50 @@ export default function Focus() {
     return () => clearTimeout(timer);
   }, [currentIndex]);
 
+  const doneCount = useMemo(() => countDone(dynamicTasks), [dynamicTasks]);
+  const totalCount = dynamicTasks.length || 1;
+  const progressPct = (doneCount / totalCount) * 100;
+
+  const goBackToBreakdown = () => {
+    persistCategory(dynamicTasks, {});
+    navigate("/breakdown");
+  };
+
   const handleNext = () => {
     setShowDetail(false);
-    if (currentIndex < dynamicTasks.length - 1) {
-      setCurrentIndex((v) => v + 1);
-    } else {
-      navigate("/reflect");
+
+    // Mark current as done
+    const nextTasks = dynamicTasks.map((t, idx) => (idx === currentIndex ? { ...t, done: true } : t));
+    setDynamicTasks(nextTasks);
+
+    // Persist immediately (so resume works even if they leave right now)
+    persistCategory(nextTasks, {});
+
+    // If finished category, mark completed and go back
+    if (countDone(nextTasks) >= nextTasks.length) {
+      persistCategory(nextTasks, { status: "completed" });
+      navigate("/breakdown");
+      return;
     }
+
+    // Move to next todo
+    setCurrentIndex(firstTodoIndex(nextTasks));
   };
 
   const handleComeBackLater = () => {
     setShowDetail(false);
 
+    // Move current task to end (keep it not-done)
     const taskToMove = dynamicTasks[currentIndex];
-    setDynamicTasks((prev) => [...prev, taskToMove]);
-    setCurrentIndex((v) => Math.min(v + 1, dynamicTasks.length)); // safe bound
-  };
+    const rest = dynamicTasks.filter((_, idx) => idx !== currentIndex);
+    const nextTasks = [...rest, taskToMove];
 
-  const progress = dynamicTasks.length > 0 ? ((currentIndex + 1) / dynamicTasks.length) * 100 : 0;
+    setDynamicTasks(nextTasks);
+    setCurrentIndex(firstTodoIndex(nextTasks));
+
+    // Persist order change
+    persistCategory(nextTasks, {});
+  };
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center font-sans overflow-hidden">
@@ -80,15 +206,29 @@ export default function Focus() {
         }}
       />
 
-      <div className="w-full flex flex-col items-center justify-start pt-20 px-6 z-10 min-h-screen">
+      {/* top bar */}
+      <div className="w-full flex items-center justify-between px-6 pt-6 z-10">
+        <button
+          onClick={goBackToBreakdown}
+          className="h-11 px-4 rounded-2xl bg-white/70 border border-white/80 shadow-sm text-slate-700 font-semibold"
+          type="button"
+        >
+          ← Categories
+        </button>
+
+        <div className="text-slate-700 font-semibold bg-white/60 border border-white/80 px-3 py-2 rounded-2xl shadow-sm">
+          {doneCount}/{totalCount} done
+        </div>
+      </div>
+
+      <div className="w-full flex flex-col items-center justify-start pt-8 px-6 z-10 min-h-screen">
         <div className="w-full max-w-md bg-white/40 h-2.5 rounded-full mb-8 shadow-sm">
           <div
             className="bg-[#5072A7] h-2.5 rounded-full transition-all duration-500"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${progressPct}%` }}
           />
         </div>
 
-        {/* Optional: show category/scoped title if available */}
         {titleFromState ? (
           <div className="w-full max-w-md text-center mb-6">
             <div className="text-slate-700 font-semibold">{titleFromState}</div>
@@ -97,12 +237,12 @@ export default function Focus() {
 
         <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
           <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-sm">
-            Step {Math.min(currentIndex + 1, dynamicTasks.length)} of {dynamicTasks.length}
+            Step {Math.min(doneCount + 1, totalCount)} of {totalCount}
           </p>
 
           <div className="space-y-4">
             <h2 className="text-3xl font-semibold text-slate-800 leading-tight">
-              {currentTask?.text ?? String(currentTask ?? "")}
+              {currentTask?.text ?? ""}
             </h2>
 
             <button
@@ -136,7 +276,7 @@ export default function Focus() {
               className="w-full py-5 bg-[#DEE5D4] text-slate-700 rounded-full font-bold text-xl shadow-lg hover:bg-[#ced9c1] transition-transform active:scale-95"
               type="button"
             >
-              {currentIndex === dynamicTasks.length - 1 ? "Finish & Reflect" : "Done →"}
+              {doneCount === totalCount - 1 ? "Finish Category →" : "Done →"}
             </button>
 
             <button

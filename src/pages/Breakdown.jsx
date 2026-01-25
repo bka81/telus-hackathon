@@ -27,6 +27,9 @@ const INTAKE_KEY = "lastIntake_v1";
 const THEMES_KEY = "lastThemes_v1";
 const THEMES_SIG_KEY = "lastThemesSig_v1";
 
+// Progress persistence (includes per-category tasks so Focus can resume)
+const PROGRESS_KEY = "lastProgress_v1";
+
 function safeParse(str) {
   try {
     return JSON.parse(str);
@@ -35,12 +38,24 @@ function safeParse(str) {
   }
 }
 
-/**
- * IMPORTANT:
- * - Icon selection will work best if your /.netlify/functions/themes returns `iconKey` for each category.
- * - This file also supports: stable `id` mapping (focus_now/decisions/money_finance/digital_admin),
- *   plus keyword fallback based on title/subtitle.
- */
+function getSig({ task, energy, sensory }) {
+  return JSON.stringify({
+    task: task || "",
+    energy: energy || "medium",
+    sensory: sensory || "medium",
+  });
+}
+
+function loadProgress(sig) {
+  const all = safeParse(localStorage.getItem(PROGRESS_KEY)) || {};
+  return all?.[sig] || null;
+}
+
+function saveProgress(sig, next) {
+  const all = safeParse(localStorage.getItem(PROGRESS_KEY)) || {};
+  all[sig] = next;
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+}
 
 // 19 icon-key mapping (expects iconKey like: "checklist", "money", "study", etc.)
 const ICONS_BY_KEY = {
@@ -97,7 +112,7 @@ const KEYWORD_RULES = [
 ];
 
 function pickIcon(category, index = 0) {
-  // 1) Strongest: model-provided iconKey (recommended)
+  // 1) Strongest: model-provided iconKey
   const iconKey = String(category?.iconKey || "").trim().toLowerCase();
   if (iconKey && ICONS_BY_KEY[iconKey]) return ICONS_BY_KEY[iconKey];
 
@@ -116,7 +131,7 @@ function pickIcon(category, index = 0) {
   return fallback[index] || iconMisc;
 }
 
-// Soft “tint” per card (kept subtle)
+// Soft tint per card
 function tintFromIndex(i) {
   const tints = [
     { bg: "rgba(142,172,205,0.22)" },
@@ -132,7 +147,7 @@ export default function Breakdown() {
   const navigate = useNavigate();
 
   const intake = useMemo(() => {
-    if (location.state && typeof location.state === "object") return location.state;
+    if (location.state && typeof location.state === "object" && location.state?.task) return location.state;
     const saved = localStorage.getItem(INTAKE_KEY);
     return saved ? safeParse(saved) : null;
   }, [location.state]);
@@ -144,6 +159,7 @@ export default function Breakdown() {
   const task = intake?.task ?? "";
   const energy = intake?.energy ?? "medium";
   const sensory = intake?.sensory ?? "medium";
+  const sig = useMemo(() => getSig({ task, energy, sensory }), [task, energy, sensory]);
 
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
@@ -154,9 +170,36 @@ export default function Breakdown() {
     return cached ? safeParse(cached) : null;
   });
 
-  const headline = themes?.headline ?? "Here are the main areas to tackle";
-  const subhead = themes?.subhead ?? "Pick one to start. We’ll take it step by step.";
   const categories = Array.isArray(themes?.categories) ? themes.categories : [];
+  const headline = themes?.headline ?? "Your main focus areas.";
+  const subhead = themes?.subhead ?? "Pick one to start. We’ll take it step by step.";
+
+  // show/hide completed
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  // progress from localStorage
+  const progress = useMemo(() => {
+    const p = loadProgress(sig);
+    const perCat = p?.perCategory || {};
+    const completedCategories = Object.values(perCat).filter((v) => v?.status === "completed").length;
+    return { perCat, completedCategories };
+  }, [sig]);
+
+  // Ensure totalSteps exists (for completeness; not displayed anymore)
+  useEffect(() => {
+    if (!categories.length) return;
+    const current = loadProgress(sig);
+    const totalSteps = categories.reduce((sum, c) => sum + (Number(c?.stepsCount) || 0), 0);
+
+    if (!current || Number(current.totalSteps || 0) !== totalSteps) {
+      const next = {
+        completedSteps: Number(current?.completedSteps || 0),
+        totalSteps,
+        perCategory: current?.perCategory || {},
+      };
+      saveProgress(sig, next);
+    }
+  }, [sig, categories]);
 
   useEffect(() => {
     if (!task) {
@@ -165,11 +208,9 @@ export default function Breakdown() {
       return;
     }
 
-    const sig = JSON.stringify({ task, energy, sensory });
     const cachedSig = localStorage.getItem(THEMES_SIG_KEY);
     const cachedThemes = localStorage.getItem(THEMES_KEY);
 
-    // Prevents double-generation in React 18 dev StrictMode remounts
     if (cachedSig === sig && cachedThemes) {
       const parsed = safeParse(cachedThemes);
       if (parsed?.categories?.length === 4) {
@@ -219,11 +260,52 @@ export default function Breakdown() {
     return () => {
       cancelled = true;
     };
-  }, [task, energy, sensory]);
+  }, [task, energy, sensory, sig]);
+
+  const categoriesLeftLabel = useMemo(() => {
+    const total = categories.length || 0;
+    const done = progress.completedCategories || 0;
+    const left = Math.max(0, total - done);
+    if (!total) return "";
+    return `${left}/${total} categories left`;
+  }, [categories.length, progress.completedCategories]);
+
+  const visibleCategories = useMemo(() => {
+    if (showCompleted) return categories;
+    return categories.filter((c) => {
+      const catId = String(c?.id || "");
+      const catProg = progress.perCat?.[catId];
+      return catProg?.status !== "completed";
+    });
+  }, [categories, showCompleted, progress.perCat]);
 
   const handlePick = async (category) => {
     if (!task) return;
 
+    const catId = String(category?.id || "");
+    const currentProg = loadProgress(sig) || { completedSteps: 0, totalSteps: 0, perCategory: {} };
+    const catProg = currentProg?.perCategory?.[catId];
+
+    // If completed, ignore
+    if (catProg?.status === "completed") return;
+
+    // IMPORTANT FIX #3:
+    // If user previously started this category and we have saved tasks, resume WITHOUT regenerating.
+    if (Array.isArray(catProg?.tasks) && catProg.tasks.length > 0) {
+      navigate("/focus", {
+        state: {
+          tasks: catProg.tasks,
+          title: catProg.title || category.title,
+          restSuggestion: catProg.restSuggestion ?? null,
+          selectedCategory: { ...category, stepsCount: Number(category?.stepsCount) || catProg.tasks.length },
+          intake: { task, energy, sensory },
+          sig,
+        },
+      });
+      return;
+    }
+
+    // Otherwise generate fresh steps
     setPicking(true);
     setError("");
 
@@ -235,7 +317,6 @@ export default function Breakdown() {
           task,
           energy,
           sensory,
-          // critical: keep UI pill and generated steps consistent
           stepsCount: category?.stepsCount,
           category: {
             id: category?.id,
@@ -253,17 +334,40 @@ export default function Breakdown() {
       const steps = Array.isArray(json?.steps) ? json.steps : [];
 
       const tasksForFocus = steps.map((s, idx) => ({
+        id: `s_${idx + 1}`,
         text: String(s?.title ?? `Step ${idx + 1}`),
         detail: String(s?.detail ?? ""),
+        done: false,
       }));
+
+      // Initialize per-category progress WITH tasks so we can resume later
+      if (!currentProg.perCategory) currentProg.perCategory = {};
+      currentProg.perCategory[catId] = {
+        doneSteps: 0,
+        totalSteps: Number(category?.stepsCount) || tasksForFocus.length,
+        status: "active",
+        tasks: tasksForFocus,
+        title: String(json?.title ?? category.title),
+        restSuggestion: json?.restSuggestion ?? null,
+      };
+
+      // Recompute global completedSteps from perCategory
+      const completedSteps = Object.values(currentProg.perCategory).reduce(
+        (sum, v) => sum + Number(v?.doneSteps || 0),
+        0
+      );
+      currentProg.completedSteps = completedSteps;
+
+      saveProgress(sig, currentProg);
 
       navigate("/focus", {
         state: {
           tasks: tasksForFocus,
           title: json?.title ?? category.title,
           restSuggestion: json?.restSuggestion ?? null,
-          selectedCategory: category,
+          selectedCategory: { ...category, stepsCount: Number(category?.stepsCount) || tasksForFocus.length },
           intake: { task, energy, sensory },
+          sig,
         },
       });
     } catch (e) {
@@ -280,15 +384,26 @@ export default function Breakdown() {
 
       <div className="bd__viewport">
         <div className="bd__content">
-          <nav className="bd__nav">
-            <Link to="/" aria-label="Go back" className="bd__back">
-              ←
-            </Link>
-          </nav>
-
           <header className="bd__header">
-            <h1 className="bd__title">{headline}</h1>
+            {/* Back arrow moved to left of title */}
+            <div className="bd__titleRow">
+              <Link to="/" aria-label="Go back" className="bd__backInline">
+                ←
+              </Link>
+              <h1 className="bd__title">{headline}</h1>
+            </div>
+
             <p className="bd__sub">{subhead}</p>
+
+            {/* Cleaner top line: categories left + show completed inline */}
+            {categories.length > 0 && (
+              <div className="bd__topMetaRow">
+                <div className="bd__metaPill">{categoriesLeftLabel}</div>
+                <button type="button" className="bd__toggle" onClick={() => setShowCompleted((v) => !v)}>
+                  {showCompleted ? "Hide completed" : "Show completed"}
+                </button>
+              </div>
+            )}
           </header>
 
           <section className="bd__panel" aria-label="Categories">
@@ -310,20 +425,25 @@ export default function Breakdown() {
                 {picking && <div className="bd__status">Creating steps…</div>}
 
                 <div className="bd__grid">
-                  {categories.map((c, idx) => {
+                  {visibleCategories.map((c, idx) => {
                     const tint = tintFromIndex(idx);
                     const iconSrc = pickIcon(c, idx);
+
+                    const catId = String(c?.id || "");
+                    const catProg = progress.perCat?.[catId];
+                    const isDone = catProg?.status === "completed";
+                    const doneSteps = Number(catProg?.doneSteps || 0);
+                    const totalSteps = Number(catProg?.totalSteps || c?.stepsCount || 0);
 
                     return (
                       <button
                         key={c.id ?? idx}
                         type="button"
-                        disabled={picking}
+                        disabled={picking || isDone}
                         onClick={() => handlePick(c)}
-                        className="bd__card"
+                        className={`bd__card ${isDone ? "bd__card--done" : ""}`}
                       >
                         <div className="bd__topRow">
-                          {/* BIG ICON (no arrow now) */}
                           <div className="bd__iconWrap" aria-hidden="true" style={{ background: tint.bg }}>
                             <img src={iconSrc} alt="" className="bd__iconBig" loading="lazy" />
                           </div>
@@ -335,12 +455,28 @@ export default function Breakdown() {
                         </div>
 
                         <div className="bd__metaRow">
-                          <div className="bd__pill">{c.stepsCount} steps</div>
+                          {isDone ? (
+                            <div className="bd__pill bd__pill--done">Done</div>
+                          ) : (
+                            <div className="bd__pill">
+                              {doneSteps > 0 ? `${doneSteps}/${totalSteps || c.stepsCount} done` : `${c.stepsCount} steps`}
+                            </div>
+                          )}
                         </div>
                       </button>
                     );
                   })}
                 </div>
+
+                {!visibleCategories.length && categories.length > 0 && (
+                  <div className="bd__allDone">
+                    <div className="bd__allDoneTitle">All set.</div>
+                    <div className="bd__allDoneSub">You finished everything in this plan.</div>
+                    <Link to="/" className="bd__errorBtn">
+                      Start a new one
+                    </Link>
+                  </div>
+                )}
               </>
             )}
           </section>
@@ -409,15 +545,22 @@ export default function Breakdown() {
           padding-top: 10px;
         }
 
-        .bd__nav{
-          display: flex;
-          justify-content: center;
-          margin-bottom: 8px;
+        .bd__header{
+          text-align: center;
+          margin: 14px 0 16px;
+          padding: 0 8px;
         }
 
-        .bd__back{
-          width: 44px;
-          height: 44px;
+        .bd__titleRow{
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        }
+
+        .bd__backInline{
+          width: 42px;
+          height: 42px;
           border-radius: 14px;
           display: inline-flex;
           align-items: center;
@@ -429,12 +572,7 @@ export default function Breakdown() {
           color: rgba(27,34,46,0.88);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
-        }
-
-        .bd__header{
-          text-align: center;
-          margin: 14px 0 16px;
-          padding: 0 8px;
+          flex: 0 0 auto;
         }
 
         .bd__title{
@@ -451,6 +589,37 @@ export default function Breakdown() {
           font-weight: 550;
           color: rgba(27,34,46,0.58);
           line-height: 1.35;
+        }
+
+        .bd__topMetaRow{
+          margin-top: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .bd__metaPill{
+          font-size: 12px;
+          font-weight: 800;
+          color: rgba(27,34,46,0.70);
+          background: rgba(255,255,255,0.70);
+          border: 1px solid rgba(27,34,46,0.10);
+          padding: 8px 12px;
+          border-radius: 999px;
+          box-shadow: 0 10px 18px rgba(27,34,46,0.06);
+        }
+
+        .bd__toggle{
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 850;
+          color: rgba(27,34,46,0.58);
+          text-decoration: underline;
+          padding: 6px 6px;
         }
 
         .bd__panel{
@@ -474,6 +643,15 @@ export default function Breakdown() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 14px;
+          align-items: stretch;
+        }
+
+        /* FIX #1: if there is an odd number of cards, center the last one */
+        .bd__grid > .bd__card:last-child:nth-child(odd){
+          grid-column: 1 / -1;
+          justify-self: center;
+          max-width: calc((100% - 14px) / 2);
+          width: 100%;
         }
 
         .bd__skeleton{
@@ -505,7 +683,8 @@ export default function Breakdown() {
           flex-direction: column;
           gap: 12px;
 
-          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, opacity 160ms ease;
+          width: 100%;
         }
 
         .bd__card:hover{
@@ -519,8 +698,12 @@ export default function Breakdown() {
         }
 
         .bd__card:disabled{
-          opacity: 0.78;
           cursor: not-allowed;
+        }
+
+        .bd__card--done{
+          opacity: 0.55;
+          background: rgba(255,255,255,0.55);
         }
 
         .bd__topRow{
@@ -529,7 +712,6 @@ export default function Breakdown() {
           justify-content: center;
         }
 
-        /*hero element */
         .bd__iconWrap{
           width: 92px;
           height: 92px;
@@ -538,7 +720,7 @@ export default function Breakdown() {
           align-items: center;
           justify-content: center;
           box-shadow: 0 14px 26px rgba(27,34,46,0.08);
-          transform: scale(1.06); /* tiny boost without changing layout much */
+          transform: scale(1.06);
           filter: saturate(1.05) contrast(1.05);
         }
 
@@ -565,6 +747,11 @@ export default function Breakdown() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+
+        .bd__card--done .bd__cardTitle{
+          text-decoration: line-through;
+          color: rgba(27,34,46,0.55);
         }
 
         .bd__cardSub{
@@ -598,6 +785,10 @@ export default function Breakdown() {
           box-shadow: 0 10px 18px rgba(27,34,46,0.06);
         }
 
+        .bd__pill--done{
+          font-weight: 900;
+        }
+
         .bd__error{
           text-align: center;
           padding: 18px 10px;
@@ -620,6 +811,25 @@ export default function Breakdown() {
           font-size: 13px;
         }
 
+        .bd__allDone{
+          text-align: center;
+          margin-top: 16px;
+          padding: 14px 10px 6px;
+        }
+
+        .bd__allDoneTitle{
+          font-weight: 900;
+          color: rgba(27,34,46,0.82);
+          margin-bottom: 6px;
+        }
+
+        .bd__allDoneSub{
+          font-size: 12px;
+          font-weight: 650;
+          color: rgba(27,34,46,0.58);
+          margin-bottom: 12px;
+        }
+
         .bd__footer{
           padding: 14px 0 18px;
           text-align: center;
@@ -635,6 +845,9 @@ export default function Breakdown() {
           .bd__card{ min-height: 196px; }
           .bd__iconWrap{ width: 88px; height: 88px; border-radius: 24px; }
           .bd__iconBig{ width: 88px; height: 88px; }
+          .bd__grid > .bd__card:last-child:nth-child(odd){
+            max-width: calc((100% - 12px) / 2);
+          }
         }
       `}</style>
     </main>
