@@ -1,16 +1,74 @@
-# React + Vite
+# Unlinear — Tasks, made calmer.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Unlinear is a **mobile-first AI task simplification tool** built for moments when everything feels overwhelming. It’s designed with neurodivergent users in mind (ADHD, autism, executive dysfunction), but it’s useful for anyone dealing with stress, decision fatigue, or burnout.
 
-Currently, two official plugins are available:
+Instead of acting like a traditional to-do app (where you must already know the steps), Unlinear lets users type **messy, real-life thoughts** in their own words. The app uses AI to turn that input into **a few starting points** and then guides the user through **gentle, doable steps — one at a time**.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## What it does (Demo flow)
+1. **Type what’s on your mind** (free-text input)
+2. Set **Energy level** + **Sensory tolerance**
+3. Get a few **main focus areas** (cards) to choose from
+4. Enter **Focus Mode**: one step at a time with **Done → Next** (no timers, no pressure)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Why it matters
+When someone is overwhelmed, task initiation and decision-making become the hardest part. Unlinear reduces cognitive load by:
+- offering **small, concrete steps**
+- limiting choices to **a few starting points**
+- adapting the plan to the user’s **current capacity**
+- using a **gentle, non-judgmental tone**
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## Built with
+- **React** (mobile-first UI)
+- **Tailwind CSS**
+- **React Router**
+- **Netlify Functions** (serverless AI calls; keeps API keys off the client)
+- **Node.js + npm**
+
+---
+
+## Run locally
+### 1) Install
+```bash
+npm install
+```
+
+### 2) Add your API key
+Create a `.env` file in the project root:
+```bash
+OPENAI_API_KEY="YOUR_KEY_HERE"
+```
+
+> Don’t commit `.env` to GitHub.
+
+### 3) Start the app
+**Recommended (frontend + functions):**
+```bash
+npm install -g netlify-cli
+netlify dev
+```
+
+---
+
+## Deploy (Netlify)
+1. Push the repo to GitHub  
+2. Connect it to Netlify  
+3. Add `OPENAI_API_KEY` in Netlify Environment Variables  
+4. Deploy  
+
+---
+
+## Notes (Hackathon-ready)
+- User input is only used to generate the breakdown.
+- API keys are stored server-side via serverless functions.
+- This is a prototype focused on accessibility and cognitive-load reduction.
+
+---
+
+## Team
+(Add team members here)
