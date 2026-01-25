@@ -9,7 +9,7 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || "{}");
-    const { task, energy = "medium", sensory = "medium", category } = body;
+    const { task, energy = "medium", sensory = "medium", stepsCount } = body;
 
     if (!task || typeof task !== "string") {
       return {
@@ -18,6 +18,8 @@ export async function handler(event) {
         body: JSON.stringify({ error: "task is required (string)" }),
       };
     }
+
+    const desired = Number.isFinite(stepsCount) ? Math.max(3, Math.min(10, stepsCount)) : 7;
 
     const BASE_URL = process.env.TELUS_BASE_URL;
     const TOKEN = process.env.TELUS_ACCESS_TOKEN;
@@ -31,27 +33,16 @@ export async function handler(event) {
       };
     }
 
-    // Normalize category (optional but preferred)
-    const catTitle = typeof category?.title === "string" ? category.title : "";
-    const catSubtitle = typeof category?.subtitle === "string" ? category.subtitle : "";
-    const catId = typeof category?.id === "string" ? category.id : "";
-
     const system = `You are an accessibility-first assistant helping neurodivergent users.
 Be gentle, non-judgmental, concrete, and low-pressure.
 Return ONLY valid JSON. No markdown. No code fences.`;
 
-    const user = `Task brain dump: """${task}"""
+    const user = `Task: "${task}"
 Energy level: ${energy} (low/medium/high)
 Sensory tolerance: ${sensory} (low/medium/high)
 
-Selected category:
-- id: ${catId || "(none)"}
-- title: ${catTitle || "(none)"}
-- subtitle: ${catSubtitle || "(none)"}
-
-You must create steps ONLY for the selected category above.
-Do NOT include steps that belong to other categories.
-Create 6-9 steps. Each step must be small and actionable.
+Create EXACTLY ${desired} steps.
+Each step must be small and actionable.
 Each step detail must be 1 short sentence (max 20 words).
 Include restSuggestion only if energy is low and/or sensory is low, otherwise null.
 
@@ -78,11 +69,7 @@ Return JSON in this exact shape, with NO extra keys:
     const text = await resp.text();
 
     if (!resp.ok) {
-      return {
-        statusCode: resp.status,
-        headers: { "Content-Type": "application/json" },
-        body: text,
-      };
+      return { statusCode: resp.status, headers: { "Content-Type": "application/json" }, body: text };
     }
 
     const data = JSON.parse(text);
@@ -95,17 +82,24 @@ Return JSON in this exact shape, with NO extra keys:
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error: "Model did not return valid JSON",
-          raw,
-        }),
+        body: JSON.stringify({ error: "Model did not return valid JSON", raw }),
       };
+    }
+
+    // Hard normalize count if model drifted
+    const steps = Array.isArray(parsed?.steps) ? parsed.steps.slice(0, desired) : [];
+    while (steps.length < desired) {
+      steps.push({ title: `Step ${steps.length + 1}`, detail: "Take one small action." });
     }
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify({
+        title: parsed?.title ?? "Steps",
+        steps,
+        restSuggestion: parsed?.restSuggestion ?? null,
+      }),
     };
   } catch (err) {
     return {

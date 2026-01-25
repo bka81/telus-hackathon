@@ -35,6 +35,36 @@ function safeParse(str) {
   }
 }
 
+/**
+ * IMPORTANT:
+ * - Icon selection will work best if your /.netlify/functions/themes returns `iconKey` for each category.
+ * - This file also supports: stable `id` mapping (focus_now/decisions/money_finance/digital_admin),
+ *   plus keyword fallback based on title/subtitle.
+ */
+
+// 19 icon-key mapping (expects iconKey like: "checklist", "money", "study", etc.)
+const ICONS_BY_KEY = {
+  checklist: iconChecklist,
+  bulb: iconBulb,
+  home: iconHome,
+  bed: iconBed,
+  heart: iconHeart,
+  plant: iconPlant,
+  mail: iconMail,
+  calendar: iconCalendar,
+  dumbbell: iconDumbbell,
+  food: iconFood,
+  bags: iconBags,
+  briefcase: iconBriefcase,
+  target: iconTarget,
+  decisions: iconDecisions,
+  money: iconMoney,
+  computers: iconComputers,
+  connection: iconConnection,
+  study: iconStudy,
+  misc: iconMisc,
+};
+
 // Stable id -> icon (best match for your 4 AI categories)
 const ICON_BY_ID = {
   focus_now: iconTarget,
@@ -43,7 +73,7 @@ const ICON_BY_ID = {
   digital_admin: iconComputers,
 };
 
-// Keyword rules for “title-based” icon matching (fallbacks / future expansion)
+// Keyword rules fallback (in case iconKey is missing)
 const KEYWORD_RULES = [
   { keys: ["plan", "planning", "outline", "steps", "checklist"], icon: iconChecklist },
   { keys: ["idea", "brainstorm", "think", "concept"], icon: iconBulb },
@@ -67,17 +97,34 @@ const KEYWORD_RULES = [
 ];
 
 function pickIcon(category, index = 0) {
-  const id = String(category?.id || "").toLowerCase();
-  if (ICON_BY_ID[id]) return ICON_BY_ID[id];
+  // 1) Strongest: model-provided iconKey (recommended)
+  const iconKey = String(category?.iconKey || "").trim().toLowerCase();
+  if (iconKey && ICONS_BY_KEY[iconKey]) return ICONS_BY_KEY[iconKey];
 
+  // 2) Strong: stable category id mapping
+  const id = String(category?.id || "").trim().toLowerCase();
+  if (id && ICON_BY_ID[id]) return ICON_BY_ID[id];
+
+  // 3) Fallback: keyword match on title/subtitle/id
   const haystack = `${category?.title || ""} ${category?.subtitle || ""} ${id}`.toLowerCase();
   for (const rule of KEYWORD_RULES) {
     if (rule.keys.some((k) => haystack.includes(k))) return rule.icon;
   }
 
-  // deterministic fallback
+  // 4) Deterministic fallback
   const fallback = [iconTarget, iconDecisions, iconMoney, iconComputers];
   return fallback[index] || iconMisc;
+}
+
+// Soft “tint” per card (kept subtle)
+function tintFromIndex(i) {
+  const tints = [
+    { bg: "rgba(142,172,205,0.22)" },
+    { bg: "rgba(222,229,212,0.30)" },
+    { bg: "rgba(254,249,217,0.35)" },
+    { bg: "rgba(210,224,251,0.30)" },
+  ];
+  return tints[i % tints.length];
 }
 
 export default function Breakdown() {
@@ -122,7 +169,7 @@ export default function Breakdown() {
     const cachedSig = localStorage.getItem(THEMES_SIG_KEY);
     const cachedThemes = localStorage.getItem(THEMES_KEY);
 
-    // IMPORTANT: prevents double-generation in React 18 dev StrictMode remounts
+    // Prevents double-generation in React 18 dev StrictMode remounts
     if (cachedSig === sig && cachedThemes) {
       const parsed = safeParse(cachedThemes);
       if (parsed?.categories?.length === 4) {
@@ -188,10 +235,13 @@ export default function Breakdown() {
           task,
           energy,
           sensory,
+          // critical: keep UI pill and generated steps consistent
+          stepsCount: category?.stepsCount,
           category: {
             id: category?.id,
             title: category?.title,
             subtitle: category?.subtitle,
+            iconKey: category?.iconKey,
           },
         }),
       });
@@ -260,27 +310,36 @@ export default function Breakdown() {
                 {picking && <div className="bd__status">Creating steps…</div>}
 
                 <div className="bd__grid">
-                  {categories.map((c, idx) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      disabled={picking}
-                      onClick={() => handlePick(c)}
-                      className="bd__card"
-                    >
-                      <div className="bd__icon" aria-hidden="true">
-                        <img src={pickIcon(c, idx)} alt="" className="bd__iconImg" loading="lazy" />
-                      </div>
+                  {categories.map((c, idx) => {
+                    const tint = tintFromIndex(idx);
+                    const iconSrc = pickIcon(c, idx);
 
-                      <div className="bd__cardTitle">{c.title}</div>
+                    return (
+                      <button
+                        key={c.id ?? idx}
+                        type="button"
+                        disabled={picking}
+                        onClick={() => handlePick(c)}
+                        className="bd__card"
+                      >
+                        <div className="bd__topRow">
+                          {/* BIG ICON (no arrow now) */}
+                          <div className="bd__iconWrap" aria-hidden="true" style={{ background: tint.bg }}>
+                            <img src={iconSrc} alt="" className="bd__iconBig" loading="lazy" />
+                          </div>
+                        </div>
 
-                      <div className="bd__pill">{c.stepsCount} steps</div>
+                        <div className="bd__text">
+                          <div className="bd__cardTitle">{c.title}</div>
+                          <div className="bd__cardSub">{c.subtitle || " "}</div>
+                        </div>
 
-                      <div className="bd__arrow" aria-hidden="true">
-                        →
-                      </div>
-                    </button>
-                  ))}
+                        <div className="bd__metaRow">
+                          <div className="bd__pill">{c.stepsCount} steps</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -319,9 +378,9 @@ export default function Breakdown() {
           position: absolute;
           inset: 0;
           background: radial-gradient(
-            circle at 50% 55%,
+            circle at 50% 40%,
             rgba(255,255,255,0.10),
-            rgba(255,255,255,0.30)
+            rgba(255,255,255,0.34)
           );
         }
 
@@ -346,7 +405,7 @@ export default function Breakdown() {
 
         .bd__content{
           width: 100%;
-          max-width: 480px;
+          max-width: 500px;
           padding-top: 10px;
         }
 
@@ -363,13 +422,13 @@ export default function Breakdown() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: rgba(255,255,255,0.70);
-          border: 1px solid rgba(255,255,255,0.75);
+          background: rgba(255,255,255,0.78);
+          border: 1px solid rgba(255,255,255,0.85);
           box-shadow: 0 10px 25px rgba(27,34,46,0.10);
           text-decoration: none;
-          color: rgba(27,34,46,0.85);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          color: rgba(27,34,46,0.88);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
         }
 
         .bd__header{
@@ -381,32 +440,32 @@ export default function Breakdown() {
         .bd__title{
           margin: 0;
           font-size: 22px;
-          font-weight: 650;
-          color: rgba(27,34,46,0.86);
+          font-weight: 750;
+          color: rgba(27,34,46,0.90);
           letter-spacing: 0.1px;
         }
 
         .bd__sub{
           margin: 8px 0 0;
           font-size: 13px;
-          font-weight: 500;
-          color: rgba(27,34,46,0.55);
+          font-weight: 550;
+          color: rgba(27,34,46,0.58);
           line-height: 1.35;
         }
 
         .bd__panel{
           border-radius: 28px;
-          background: rgba(255,255,255,0.40);
-          border: 1px solid rgba(255,255,255,0.55);
+          background: rgba(255,255,255,0.42);
+          border: 1px solid rgba(255,255,255,0.62);
           box-shadow: 0 22px 70px rgba(27,34,46,0.10);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
           padding: 16px;
         }
 
         .bd__status{
           font-size: 12px;
-          color: rgba(27,34,46,0.55);
+          color: rgba(27,34,46,0.58);
           margin-bottom: 10px;
           text-align: center;
         }
@@ -418,103 +477,125 @@ export default function Breakdown() {
         }
 
         .bd__skeleton{
-          height: 132px;
-          border-radius: 24px;
-          background: rgba(255,255,255,0.55);
-          border: 1px solid rgba(255,255,255,0.70);
+          height: 190px;
+          border-radius: 26px;
+          background: rgba(255,255,255,0.62);
+          border: 1px solid rgba(255,255,255,0.78);
           box-shadow: 0 10px 20px rgba(27,34,46,0.06);
           animation: pulse 1.2s ease-in-out infinite;
         }
 
         @keyframes pulse{
-          0%,100%{ opacity: 0.85; }
-          50%{ opacity: 0.55; }
+          0%,100%{ opacity: 0.88; }
+          50%{ opacity: 0.60; }
         }
 
         .bd__card{
           position: relative;
-          height: 132px;
-          border-radius: 24px;
-          background: rgba(255,255,255,0.62);
-          border: 1px solid rgba(255,255,255,0.75);
-          box-shadow: 0 14px 28px rgba(27,34,46,0.10);
+          min-height: 190px;
+          border-radius: 26px;
+          background: rgba(255,255,255,0.82);
+          border: 1px solid rgba(255,255,255,0.90);
+          box-shadow: 0 16px 34px rgba(27,34,46,0.12);
           padding: 14px;
           text-align: left;
           cursor: pointer;
 
           display: flex;
           flex-direction: column;
-          justify-content: flex-end;
-          gap: 10px;
+          gap: 12px;
 
-          transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+          transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
         }
 
         .bd__card:hover{
           transform: translateY(-2px);
-          box-shadow: 0 18px 34px rgba(27,34,46,0.12);
-          background: rgba(255,255,255,0.72);
+          box-shadow: 0 22px 44px rgba(27,34,46,0.14);
+          background: rgba(255,255,255,0.90);
+        }
+
+        .bd__card:active{
+          transform: translateY(0px) scale(0.99);
         }
 
         .bd__card:disabled{
-          opacity: 0.75;
+          opacity: 0.78;
           cursor: not-allowed;
         }
 
-        .bd__icon{
-          position: absolute;
-          top: 12px;
-          left: 12px;
-          width: 36px;
-          height: 36px;
-          border-radius: 14px;
-          background: rgba(142,172,205,0.20);
-          border: 1px solid rgba(142,172,205,0.28);
+        .bd__topRow{
           display: flex;
           align-items: center;
           justify-content: center;
-          overflow: hidden;
         }
 
-        .bd__iconImg{
-          width: 26px;
-          height: 26px;
+        /*hero element */
+        .bd__iconWrap{
+          width: 92px;
+          height: 92px;
+          border-radius: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 14px 26px rgba(27,34,46,0.08);
+          transform: scale(1.06); /* tiny boost without changing layout much */
+          filter: saturate(1.05) contrast(1.05);
+        }
+
+        .bd__iconBig{
+          width: 84px;
+          height: 84px;
           object-fit: contain;
+          filter: saturate(1.05) contrast(1.05);
         }
 
-        .bd__arrow{
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          width: 26px;
-          height: 26px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.75);
-          border: 1px solid rgba(255,255,255,0.85);
+        .bd__text{
           display: flex;
-          align-items: center;
-          justify-content: center;
-          color: rgba(27,34,46,0.55);
-          font-weight: 700;
+          flex-direction: column;
+          gap: 6px;
         }
 
         .bd__cardTitle{
           font-size: 15px;
-          font-weight: 650;
-          color: rgba(27,34,46,0.82);
+          font-weight: 820;
+          color: rgba(27,34,46,0.88);
           line-height: 1.15;
-          padding-right: 18px;
+
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .bd__cardSub{
+          font-size: 12px;
+          font-weight: 560;
+          color: rgba(27,34,46,0.58);
+          line-height: 1.3;
+
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          min-height: calc(12px * 1.3 * 2);
+        }
+
+        .bd__metaRow{
+          margin-top: auto;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
         }
 
         .bd__pill{
-          align-self: flex-start;
           font-size: 12px;
-          font-weight: 600;
-          color: rgba(27,34,46,0.62);
-          background: rgba(255,255,255,0.70);
-          border: 1px solid rgba(255,255,255,0.80);
-          padding: 6px 10px;
+          font-weight: 700;
+          color: rgba(27,34,46,0.72);
+          background: rgba(255,255,255,0.75);
+          border: 1px solid rgba(27,34,46,0.08);
+          padding: 7px 10px;
           border-radius: 999px;
+          box-shadow: 0 10px 18px rgba(27,34,46,0.06);
         }
 
         .bd__error{
@@ -524,7 +605,7 @@ export default function Breakdown() {
 
         .bd__errorText{
           margin: 0 0 12px;
-          color: rgba(27,34,46,0.70);
+          color: rgba(27,34,46,0.74);
           font-size: 14px;
         }
 
@@ -532,10 +613,10 @@ export default function Breakdown() {
           display: inline-block;
           padding: 10px 14px;
           border-radius: 14px;
-          background: rgba(27,34,46,0.85);
+          background: rgba(27,34,46,0.88);
           color: white;
           text-decoration: none;
-          font-weight: 700;
+          font-weight: 800;
           font-size: 13px;
         }
 
@@ -546,7 +627,14 @@ export default function Breakdown() {
 
         .bd__hint{
           font-size: 12px;
-          color: rgba(27,34,46,0.55);
+          color: rgba(27,34,46,0.58);
+        }
+
+        @media (max-width: 390px){
+          .bd__grid{ gap: 12px; }
+          .bd__card{ min-height: 196px; }
+          .bd__iconWrap{ width: 88px; height: 88px; border-radius: 24px; }
+          .bd__iconBig{ width: 88px; height: 88px; }
         }
       `}</style>
     </main>

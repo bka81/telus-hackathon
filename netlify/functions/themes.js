@@ -46,17 +46,31 @@ export async function handler(event) {
       };
     }
 
-    const system = "Return ONLY valid JSON. No markdown. No code fences. No extra commentary.";
+    const system =
+      "Return ONLY valid JSON. No markdown. No code fences. No extra text. No trailing commas.";
+
+    const iconKeys =
+      "checklist,bulb,home,bed,heart,plant,mail,calendar,dumbbell,food,bags,briefcase,target,decisions,money,computers,connection,study,misc";
 
     const user = `Brain dump: """${task}"""
 Energy: ${energy} (low/medium/high)
 Sensory: ${sensory} (low/medium/high)
 
-Make EXACTLY 4 categories. Use each id exactly once:
-focus_now, decisions, money_finance, digital_admin
+Make EXACTLY 4 calm categories. Each category needs:
+- id: a short stable slug (letters/numbers/underscores)
+- title: 2–4 words
+- subtitle: <= 8 words
+- stepsCount: an integer 3–10 (realistic)
+- iconKey: choose ONE from: ${iconKeys}
 
-Return exactly this shape:
-{"headline":"Here are the main areas I heard.","subhead":"Pick one to start. We’ll take it step by step.","categories":[{"id":"focus_now|decisions|money_finance|digital_admin","title":"string","subtitle":"string","stepsCount":number}]}`;
+Return exactly:
+{
+  "headline":"Here are the main areas I heard.",
+  "subhead":"Pick one to start. We’ll take it step by step.",
+  "categories":[
+    {"id":"string","title":"string","subtitle":"string","stepsCount":number,"iconKey":"${iconKeys}"}
+  ]
+}`;
 
     const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
@@ -71,18 +85,13 @@ Return exactly this shape:
           { role: "user", content: user },
         ],
         temperature: 0.2,
-        max_tokens: 1000,
+        max_tokens: 1100,
       }),
     });
 
     const text = await resp.text();
-
     if (!resp.ok) {
-      return {
-        statusCode: resp.status,
-        headers: { "Content-Type": "application/json" },
-        body: text,
-      };
+      return { statusCode: resp.status, headers: { "Content-Type": "application/json" }, body: text };
     }
 
     const outer = safeJsonParse(text);
@@ -97,18 +106,15 @@ Return exactly this shape:
       };
     }
 
-    // Normalize and enforce stable order
-    const order = ["focus_now", "decisions", "money_finance", "digital_admin"];
-    const byId = new Map(parsed.categories.map((c) => [String(c.id), c]));
-    const categories = order.map((id) => {
-      const c = byId.get(id);
-      return {
-        id,
-        title: String(c?.title ?? id.replace("_", " ")),
-        subtitle: String(c?.subtitle ?? ""),
-        stepsCount: Number.isFinite(c?.stepsCount) ? c.stepsCount : 6,
-      };
-    });
+    const allowed = new Set(iconKeys.split(","));
+
+    const normalized = parsed.categories.map((c, idx) => ({
+      id: String(c?.id ?? `cat_${idx + 1}`).replace(/[^a-zA-Z0-9_]/g, "_"),
+      title: String(c?.title ?? `Category ${idx + 1}`),
+      subtitle: String(c?.subtitle ?? ""),
+      stepsCount: Number.isFinite(c?.stepsCount) ? Math.max(3, Math.min(10, c.stepsCount)) : 6,
+      iconKey: allowed.has(String(c?.iconKey)) ? String(c.iconKey) : "misc",
+    }));
 
     return {
       statusCode: 200,
@@ -116,7 +122,7 @@ Return exactly this shape:
       body: JSON.stringify({
         headline: String(parsed.headline ?? "Here are the main areas I heard."),
         subhead: String(parsed.subhead ?? "Pick one to start. We’ll take it step by step."),
-        categories,
+        categories: normalized,
       }),
     };
   } catch (err) {
