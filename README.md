@@ -6,6 +6,9 @@ Instead of acting like a traditional to-do app (where you must already know the 
 
 ---
 
+[Live Demo](https://unlinear.netlify.app/)
+
+---
 ## What it does (Demo flow)
 1. **Type what’s on your mind** — or tap the **mic** to **speak instead of typing** 
 2. Set **Energy level** + **Sensory tolerance**
