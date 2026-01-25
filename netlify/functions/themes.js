@@ -32,19 +32,25 @@ export async function handler(event) {
 
     const system = `You are an accessibility-first assistant helping neurodivergent users.
 Be gentle, non-judgmental, concrete, and low-pressure.
-Return ONLY valid JSON. No markdown. No code fences.`;
+Return ONLY valid JSON.`;
 
-    // Keep output compact to reduce token usage (prevents truncation)
-    const user = `Task: "${task}"
+    const user = `Brain dump: """${task}"""
 Energy level: ${energy} (low/medium/high)
 Sensory tolerance: ${sensory} (low/medium/high)
 
-Create 6-9 steps. Each step must be small and actionable.
-Each step detail must be 1 short sentence (max 20 words).
-Include restSuggestion only if energy is low and/or sensory is low, otherwise null.
+Cluster the brain dump into EXACTLY 4 categories based on underlying themes.
+Each category must be calm, concrete, and human-friendly.
+Avoid therapy language and avoid judgment.
+Each category should have an estimated stepsCount from 3 to 10.
 
-Return JSON in this exact shape, with NO extra keys:
-{"title":string,"steps":[{"title":string,"detail":string}],"restSuggestion":{"minutes":number,"reason":string}|null}`;
+Return JSON in this exact shape:
+{
+  "headline": "Here are the main areas I heard.",
+  "subhead": "Pick one to start. We’ll take it step by step.",
+  "categories": [
+    { "id": "string", "title": "string", "subtitle": "string", "stepsCount": number }
+  ]
+}`;
 
     const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
@@ -58,8 +64,8 @@ Return JSON in this exact shape, with NO extra keys:
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        temperature: 0.3,
-        max_tokens: 1400,
+        temperature: 0.4,
+        max_tokens: 650,
       }),
     });
 
@@ -83,17 +89,35 @@ Return JSON in this exact shape, with NO extra keys:
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error: "Model did not return valid JSON",
-          raw,
-        }),
+        body: JSON.stringify({ error: "Model did not return valid JSON", raw }),
       };
     }
+
+    const cats = Array.isArray(parsed?.categories) ? parsed.categories.slice(0, 4) : [];
+    if (cats.length !== 4) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Expected exactly 4 categories", parsed }),
+      };
+    }
+
+    // Ensure each has required fields
+    const normalized = cats.map((c, idx) => ({
+      id: String(c?.id ?? `cat_${idx + 1}`),
+      title: String(c?.title ?? `Category ${idx + 1}`),
+      subtitle: String(c?.subtitle ?? ""),
+      stepsCount: Number.isFinite(c?.stepsCount) ? c.stepsCount : 6,
+    }));
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify({
+        headline: parsed?.headline ?? "Here are the main areas I heard.",
+        subhead: parsed?.subhead ?? "Pick one to start. We’ll take it step by step.",
+        categories: normalized,
+      }),
     };
   } catch (err) {
     return {

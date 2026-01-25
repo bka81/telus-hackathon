@@ -4,6 +4,7 @@ import landingBg from "../assets/images/landing.jpg";
 
 export default function Welcome() {
   const navigate = useNavigate();
+
   const [focus, setFocus] = useState("");
   const [energy, setEnergy] = useState(50);
   const [sensory, setSensory] = useState(50);
@@ -42,32 +43,6 @@ export default function Welcome() {
     resizeTextarea();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
-  const handleBreakDown = async () => {
-  const res = await fetch("/api/breakdown", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      task: focus.trim(),
-      energy: energyLabel.toLowerCase(),
-      sensory: sensoryLabel.toLowerCase(),
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("Breakdown failed:", text);
-    return;
-  }
-
-  const data = await res.json();
-  console.log("AI result:", data);
-
-  // ✅ refresh-safe fallback
-  localStorage.setItem("lastBreakdown", JSON.stringify(data));
-
-  // ✅ pass to Breakdown page
-  navigate("/breakdown", { state: data });
-};
 
   return (
     <main className="welcome" aria-label="Welcome page">
@@ -162,13 +137,23 @@ export default function Welcome() {
             </div>
 
             <button
-            className="welcome__cta"
-            type="button"
-            onClick={handleBreakDown}
-            disabled={!focus.trim()}
-            aria-disabled={!focus.trim()}
+              className="welcome__cta"
+              type="button"
+              onClick={() => {
+                const intake = {
+                  task: focus.trim(),
+                  energy: energyLabel.toLowerCase(),   // "low" | "medium" | "high"
+                  sensory: sensoryLabel.toLowerCase(), // "low" | "medium" | "high"
+                };
+
+                localStorage.setItem("lastIntake_v1", JSON.stringify(intake));
+                navigate("/breakdown", { state: intake });
+              }}
+
+              disabled={!focus.trim()}
+              aria-disabled={!focus.trim()}
             >
-            Break it down
+              Break it down
             </button>
           </div>
         </section>
