@@ -2,36 +2,30 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import bgImage from "../assets/images/task-breakdown.jpg";
 
-import iconChecklist from "../assets/images/01_clipboard_checklist.png";
-import iconBulb from "../assets/images/02_lightbulb_idea_dark.png";
-import iconHome from "../assets/images/03_home.png";
-import iconBed from "../assets/images/04_sleep_bed.png";
-import iconHeart from "../assets/images/05_health_heart.png";
-import iconPlant from "../assets/images/06_plant_growth.png";
-import iconMail from "../assets/images/07_mail_envelope.png";
-import iconCalendar from "../assets/images/08_calendar_check.png";
-import iconDumbbell from "../assets/images/09_dumbbell_fitness.png";
-import iconFood from "../assets/images/10_food_plate.png";
-import iconBags from "../assets/images/11_shopping_bags.png";
-import iconBriefcase from "../assets/images/12_briefcase.png";
-
-const ICONS_BY_TYPE = {
-  planning: iconChecklist,
-  ideas: iconBulb,
-  home: iconHome,
-  sleep_rest: iconBed,
-  growth_selfcare: iconPlant,
-  health_medical: iconHeart,
-  communication: iconMail,
-  schedule_admin: iconCalendar,
-  activity: iconDumbbell,
-  food_nutrition: iconFood,
-  shopping_errands: iconBags,
-  travel_career: iconBriefcase,
-};
+// 19 icons
+import icon01Checklist from "../assets/images/01_clipboard_checklist.png";
+import icon02Bulb from "../assets/images/02_lightbulb_idea_dark.png";
+import icon03Home from "../assets/images/03_home.png";
+import icon04Bed from "../assets/images/04_sleep_bed.png";
+import icon05Heart from "../assets/images/05_health_heart.png";
+import icon06Plant from "../assets/images/06_plant_growth.png";
+import icon07Mail from "../assets/images/07_mail_envelope.png";
+import icon08Calendar from "../assets/images/08_calendar_check.png";
+import icon09Dumbbell from "../assets/images/09_dumbbell_fitness.png";
+import icon10Food from "../assets/images/10_food_plate.png";
+import icon11Bags from "../assets/images/11_shopping_bags.png";
+import icon12Briefcase from "../assets/images/12_briefcase.png";
+import icon13Target from "../assets/images/13_target.png";
+import icon14Decisions from "../assets/images/14_decisions.png";
+import icon15Money from "../assets/images/15_money.png";
+import icon16Computers from "../assets/images/16_computers.png";
+import icon17Connection from "../assets/images/17_connection.png";
+import icon18Study from "../assets/images/18_study.png";
+import icon19Misc from "../assets/images/19_misc.png";
 
 const INTAKE_KEY = "lastIntake_v1";
 const THEMES_KEY = "lastThemes_v1";
+const THEMES_SIG_KEY = "lastThemesSig_v1";
 
 function safeParse(str) {
   try {
@@ -41,25 +35,73 @@ function safeParse(str) {
   }
 }
 
+// Stable id -> icon (best match for your 4 AI categories)
+const ICON_BY_ID = {
+  focus_now: icon13Target,
+  decisions: icon14Decisions,
+  money_finance: icon15Money,
+  digital_admin: icon16Computers,
+};
+
+// Keyword rules for “title-based” icon matching (fallbacks / future expansion)
+const KEYWORD_RULES = [
+  { keys: ["plan", "planning", "outline", "steps", "checklist"], icon: icon01Checklist },
+  { keys: ["idea", "brainstorm", "think", "concept"], icon: icon02Bulb },
+  { keys: ["home", "house", "clean", "laundry"], icon: icon03Home },
+  { keys: ["sleep", "rest", "break", "tired"], icon: icon04Bed },
+  { keys: ["health", "doctor", "medical", "med", "pain"], icon: icon05Heart },
+  { keys: ["growth", "self care", "selfcare", "habit"], icon: icon06Plant },
+  { keys: ["email", "message", "text", "call", "reply", "communicate"], icon: icon07Mail },
+  { keys: ["schedule", "calendar", "appointment", "deadline"], icon: icon08Calendar },
+  { keys: ["workout", "gym", "exercise", "fitness", "walk", "run"], icon: icon09Dumbbell },
+  { keys: ["food", "cook", "meal", "eat", "grocery"], icon: icon10Food },
+  { keys: ["shop", "buy", "order", "errand", "pickup"], icon: icon11Bags },
+  { keys: ["job", "career", "travel", "office", "work"], icon: icon12Briefcase },
+  { keys: ["focus", "urgent", "now", "today", "asap"], icon: icon13Target },
+  { keys: ["decide", "decision", "choose", "option"], icon: icon14Decisions },
+  { keys: ["money", "budget", "pay", "bill", "finance", "cost"], icon: icon15Money },
+  { keys: ["computer", "digital", "admin", "form", "login", "account", "settings"], icon: icon16Computers },
+  { keys: ["friends", "family", "relationship", "social", "connect"], icon: icon17Connection },
+  { keys: ["study", "learn", "homework", "quiz", "exam"], icon: icon18Study },
+  { keys: ["misc", "other", "random", "anything"], icon: icon19Misc },
+];
+
+function pickIcon(category, index = 0) {
+  const id = String(category?.id || "").toLowerCase();
+  if (ICON_BY_ID[id]) return ICON_BY_ID[id];
+
+  const haystack = `${category?.title || ""} ${category?.subtitle || ""} ${id}`.toLowerCase();
+  for (const rule of KEYWORD_RULES) {
+    if (rule.keys.some((k) => haystack.includes(k))) return rule.icon;
+  }
+
+  // deterministic fallback
+  const fallback = [icon13Target, icon14Decisions, icon15Money, icon16Computers];
+  return fallback[index] || icon19Misc;
+}
+
 export default function Breakdown() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Intake: { task, energy, sensory }
   const intake = useMemo(() => {
     if (location.state && typeof location.state === "object") return location.state;
     const saved = localStorage.getItem(INTAKE_KEY);
     return saved ? safeParse(saved) : null;
   }, [location.state]);
 
-  // Persist intake for refresh safety
   useEffect(() => {
     if (intake) localStorage.setItem(INTAKE_KEY, JSON.stringify(intake));
   }, [intake]);
 
+  const task = intake?.task ?? "";
+  const energy = intake?.energy ?? "medium";
+  const sensory = intake?.sensory ?? "medium";
+
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState("");
+
   const [themes, setThemes] = useState(() => {
     const cached = localStorage.getItem(THEMES_KEY);
     return cached ? safeParse(cached) : null;
@@ -69,11 +111,6 @@ export default function Breakdown() {
   const subhead = themes?.subhead ?? "Pick one to start. We’ll take it step by step.";
   const categories = Array.isArray(themes?.categories) ? themes.categories : [];
 
-  // --- Fix React warning: depend on stable primitives, not the whole intake object
-  const task = intake?.task ?? "";
-  const energy = intake?.energy ?? "medium";
-  const sensory = intake?.sensory ?? "medium";
-
   useEffect(() => {
     if (!task) {
       setLoading(false);
@@ -81,11 +118,26 @@ export default function Breakdown() {
       return;
     }
 
+    const sig = JSON.stringify({ task, energy, sensory });
+    const cachedSig = localStorage.getItem(THEMES_SIG_KEY);
+    const cachedThemes = localStorage.getItem(THEMES_KEY);
+
+    // IMPORTANT: prevents double-generation in React 18 dev StrictMode remounts
+    if (cachedSig === sig && cachedThemes) {
+      const parsed = safeParse(cachedThemes);
+      if (parsed?.categories?.length === 4) {
+        setThemes(parsed);
+        setLoading(false);
+        setError("");
+        return;
+      }
+    }
+
+    let cancelled = false;
+
     const run = async () => {
       setLoading(true);
       setError("");
-
-      console.log("[Breakdown] fetching themes with:", { task, energy, sensory });
 
       try {
         const resp = await fetch("/.netlify/functions/themes", {
@@ -98,24 +150,28 @@ export default function Breakdown() {
         if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
 
         const json = safeParse(text);
-
-        console.log("[Breakdown] themes response:", json);
-
         if (!json?.categories || !Array.isArray(json.categories) || json.categories.length !== 4) {
           throw new Error("Themes response invalid (expected exactly 4 categories).");
         }
 
+        if (cancelled) return;
+
         setThemes(json);
         localStorage.setItem(THEMES_KEY, JSON.stringify(json));
+        localStorage.setItem(THEMES_SIG_KEY, sig);
       } catch (e) {
         console.error("[Breakdown] themes error:", e);
-        setError("Couldn’t generate categories. Please try again.");
+        if (!cancelled) setError("Couldn’t generate categories. Please try again.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [task, energy, sensory]);
 
   const handlePick = async (category) => {
@@ -124,20 +180,19 @@ export default function Breakdown() {
     setPicking(true);
     setError("");
 
-    console.log("[Breakdown] picked category:", category);
-
     try {
-      const scopedTask = `${task}\n\nFocus category: ${category.title}`;
-
-      console.log("[Breakdown] fetching breakdown with:", { scopedTask, energy, sensory });
-
       const resp = await fetch("/.netlify/functions/breakdown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          task: scopedTask,
+          task,
           energy,
           sensory,
+          category: {
+            id: category?.id,
+            title: category?.title,
+            subtitle: category?.subtitle,
+          },
         }),
       });
 
@@ -145,9 +200,6 @@ export default function Breakdown() {
       if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
 
       const json = safeParse(text);
-
-      console.log("[Breakdown] breakdown response:", json);
-
       const steps = Array.isArray(json?.steps) ? json.steps : [];
 
       const tasksForFocus = steps.map((s, idx) => ({
@@ -174,12 +226,7 @@ export default function Breakdown() {
 
   return (
     <main className="bd" aria-label="Breakdown page">
-      {/* Background like Welcome */}
-      <div
-        className="bd__bg"
-        aria-hidden="true"
-        style={{ backgroundImage: `url(${bgImage})` }}
-      />
+      <div className="bd__bg" aria-hidden="true" style={{ backgroundImage: `url(${bgImage})` }} />
 
       <div className="bd__viewport">
         <div className="bd__content">
@@ -213,7 +260,7 @@ export default function Breakdown() {
                 {picking && <div className="bd__status">Creating steps…</div>}
 
                 <div className="bd__grid">
-                  {categories.map((c) => (
+                  {categories.map((c, idx) => (
                     <button
                       key={c.id}
                       type="button"
@@ -221,12 +268,13 @@ export default function Breakdown() {
                       onClick={() => handlePick(c)}
                       className="bd__card"
                     >
-                      <div className="bd__icon" aria-hidden="true" />
+                      <div className="bd__icon" aria-hidden="true">
+                        <img src={pickIcon(c, idx)} alt="" className="bd__iconImg" loading="lazy" />
+                      </div>
+
                       <div className="bd__cardTitle">{c.title}</div>
 
-                      <div className="bd__pill">
-                        {c.stepsCount} steps
-                      </div>
+                      <div className="bd__pill">{c.stepsCount} steps</div>
 
                       <div className="bd__arrow" aria-hidden="true">
                         →
@@ -256,7 +304,6 @@ export default function Breakdown() {
           font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
         }
 
-        /* Background: same behavior as Welcome */
         .bd__bg{
           position: absolute;
           inset: 0;
@@ -331,7 +378,6 @@ export default function Breakdown() {
           padding: 0 8px;
         }
 
-        /* Lighter typography */
         .bd__title{
           margin: 0;
           font-size: 22px;
@@ -348,7 +394,6 @@ export default function Breakdown() {
           line-height: 1.35;
         }
 
-        /* Single soft panel (no extra nested boxes) */
         .bd__panel{
           border-radius: 28px;
           background: rgba(255,255,255,0.40);
@@ -416,16 +461,25 @@ export default function Breakdown() {
           cursor: not-allowed;
         }
 
-        /* Placeholder for your friend’s icons */
         .bd__icon{
           position: absolute;
           top: 12px;
           left: 12px;
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: 14px;
           background: rgba(142,172,205,0.20);
           border: 1px solid rgba(142,172,205,0.28);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+        }
+
+        .bd__iconImg{
+          width: 26px;
+          height: 26px;
+          object-fit: contain;
         }
 
         .bd__arrow{

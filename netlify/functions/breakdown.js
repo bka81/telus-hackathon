@@ -8,7 +8,8 @@ export async function handler(event) {
       };
     }
 
-    const { task, energy = "medium", sensory = "medium" } = JSON.parse(event.body || "{}");
+    const body = JSON.parse(event.body || "{}");
+    const { task, energy = "medium", sensory = "medium", category } = body;
 
     if (!task || typeof task !== "string") {
       return {
@@ -30,15 +31,26 @@ export async function handler(event) {
       };
     }
 
+    // Normalize category (optional but preferred)
+    const catTitle = typeof category?.title === "string" ? category.title : "";
+    const catSubtitle = typeof category?.subtitle === "string" ? category.subtitle : "";
+    const catId = typeof category?.id === "string" ? category.id : "";
+
     const system = `You are an accessibility-first assistant helping neurodivergent users.
 Be gentle, non-judgmental, concrete, and low-pressure.
 Return ONLY valid JSON. No markdown. No code fences.`;
 
-    // Keep output compact to reduce token usage (prevents truncation)
-    const user = `Task: "${task}"
+    const user = `Task brain dump: """${task}"""
 Energy level: ${energy} (low/medium/high)
 Sensory tolerance: ${sensory} (low/medium/high)
 
+Selected category:
+- id: ${catId || "(none)"}
+- title: ${catTitle || "(none)"}
+- subtitle: ${catSubtitle || "(none)"}
+
+You must create steps ONLY for the selected category above.
+Do NOT include steps that belong to other categories.
 Create 6-9 steps. Each step must be small and actionable.
 Each step detail must be 1 short sentence (max 20 words).
 Include restSuggestion only if energy is low and/or sensory is low, otherwise null.

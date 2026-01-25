@@ -11,20 +11,35 @@ export default function Focus() {
     return Array.isArray(t) ? t : [];
   }, [location.state]);
 
-  // Initializing state with tasks
-  const [dynamicTasks, setDynamicTasks] = useState(() => 
-    tasksFromState.length > 0
-      ? tasksFromState
-      : [
-          { text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy." },
-          { text: "Write down symptoms", detail: "Note when they started and any triggers you noticed." },
-          { text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step." },
-        ]
+  const titleFromState = useMemo(() => {
+    const t = location.state?.title;
+    return typeof t === "string" ? t : "";
+  }, [location.state]);
+
+  const fallbackTasks = useMemo(
+    () => [
+      { text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy." },
+      { text: "Write down symptoms", detail: "Note when they started and any triggers you noticed." },
+      { text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step." },
+    ],
+    []
+  );
+
+  const [dynamicTasks, setDynamicTasks] = useState(() =>
+    tasksFromState.length > 0 ? tasksFromState : fallbackTasks
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
   const [isWiggling, setIsWiggling] = useState(false);
+
+  // ✅ KEY FIX: when you navigate to /focus with new state, update tasks + reset progress
+  useEffect(() => {
+    const next = tasksFromState.length > 0 ? tasksFromState : fallbackTasks;
+    setDynamicTasks(next);
+    setCurrentIndex(0);
+    setShowDetail(false);
+  }, [tasksFromState, fallbackTasks, location.key]);
 
   const currentTask = dynamicTasks[currentIndex];
 
@@ -43,20 +58,15 @@ export default function Focus() {
     }
   };
 
-  // ✅ LOGIC: Push a copy to the end and move to the next index
   const handleComeBackLater = () => {
     setShowDetail(false);
-    
+
     const taskToMove = dynamicTasks[currentIndex];
-    
-    // Add the current task to the end of the list
-    setDynamicTasks(prev => [...prev, taskToMove]);
-    
-    // Increment the index so the UI shows "Step 2", "Step 3", etc.
-    setCurrentIndex((v) => v + 1);
+    setDynamicTasks((prev) => [...prev, taskToMove]);
+    setCurrentIndex((v) => Math.min(v + 1, dynamicTasks.length)); // safe bound
   };
 
-  const progress = ((currentIndex + 1) / dynamicTasks.length) * 100;
+  const progress = dynamicTasks.length > 0 ? ((currentIndex + 1) / dynamicTasks.length) * 100 : 0;
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center font-sans overflow-hidden">
@@ -71,21 +81,28 @@ export default function Focus() {
       />
 
       <div className="w-full flex flex-col items-center justify-start pt-20 px-6 z-10 min-h-screen">
-        <div className="w-full max-w-md bg-white/40 h-2.5 rounded-full mb-16 shadow-sm">
+        <div className="w-full max-w-md bg-white/40 h-2.5 rounded-full mb-8 shadow-sm">
           <div
             className="bg-[#5072A7] h-2.5 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
 
+        {/* Optional: show category/scoped title if available */}
+        {titleFromState ? (
+          <div className="w-full max-w-md text-center mb-6">
+            <div className="text-slate-700 font-semibold">{titleFromState}</div>
+          </div>
+        ) : null}
+
         <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
           <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-sm">
-            Step {currentIndex + 1} of {dynamicTasks.length}
+            Step {Math.min(currentIndex + 1, dynamicTasks.length)} of {dynamicTasks.length}
           </p>
 
           <div className="space-y-4">
             <h2 className="text-3xl font-semibold text-slate-800 leading-tight">
-              {currentTask?.text ?? String(currentTask)}
+              {currentTask?.text ?? String(currentTask ?? "")}
             </h2>
 
             <button
@@ -132,9 +149,7 @@ export default function Focus() {
           </div>
         </div>
 
-        <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">
-          Just focus on this one thing.
-        </p>
+        <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">Just focus on this one thing.</p>
       </div>
     </div>
   );

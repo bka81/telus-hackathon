@@ -1,3 +1,19 @@
+function safeJsonParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+}
+
+function extractFirstJsonObject(text) {
+  if (typeof text !== "string") return null;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return safeJsonParse(text.slice(start, end + 1));
+}
+
 export async function handler(event) {
   try {
     if (event.httpMethod !== "POST") {
@@ -30,27 +46,17 @@ export async function handler(event) {
       };
     }
 
-    const system = `You are an accessibility-first assistant helping neurodivergent users.
-Be gentle, non-judgmental, concrete, and low-pressure.
-Return ONLY valid JSON.`;
+    const system = "Return ONLY valid JSON. No markdown. No code fences. No extra commentary.";
 
     const user = `Brain dump: """${task}"""
-Energy level: ${energy} (low/medium/high)
-Sensory tolerance: ${sensory} (low/medium/high)
+Energy: ${energy} (low/medium/high)
+Sensory: ${sensory} (low/medium/high)
 
-Cluster the brain dump into EXACTLY 4 categories based on underlying themes.
-Each category must be calm, concrete, and human-friendly.
-Avoid therapy language and avoid judgment.
-Each category should have an estimated stepsCount from 3 to 10.
+Make EXACTLY 4 categories. Use each id exactly once:
+focus_now, decisions, money_finance, digital_admin
 
-Return JSON in this exact shape:
-{
-  "headline": "Here are the main areas I heard.",
-  "subhead": "Pick one to start. We’ll take it step by step.",
-  "categories": [
-    { "id": "string", "title": "string", "subtitle": "string", "stepsCount": number }
-  ]
-}`;
+Return exactly this shape:
+{"headline":"Here are the main areas I heard.","subhead":"Pick one to start. We’ll take it step by step.","categories":[{"id":"focus_now|decisions|money_finance|digital_admin","title":"string","subtitle":"string","stepsCount":number}]}`;
 
     const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
@@ -64,8 +70,8 @@ Return JSON in this exact shape:
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        temperature: 0.4,
-        max_tokens: 650,
+        temperature: 0.2,
+        max_tokens: 1000,
       }),
     });
 
@@ -79,13 +85,11 @@ Return JSON in this exact shape:
       };
     }
 
-    const data = JSON.parse(text);
-    const raw = data?.choices?.[0]?.message?.content ?? "";
+    const outer = safeJsonParse(text);
+    const raw = outer?.choices?.[0]?.message?.content ?? "";
+    const parsed = safeJsonParse(raw) || extractFirstJsonObject(raw);
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    if (!parsed || !Array.isArray(parsed.categories) || parsed.categories.length !== 4) {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
@@ -93,30 +97,26 @@ Return JSON in this exact shape:
       };
     }
 
-    const cats = Array.isArray(parsed?.categories) ? parsed.categories.slice(0, 4) : [];
-    if (cats.length !== 4) {
+    // Normalize and enforce stable order
+    const order = ["focus_now", "decisions", "money_finance", "digital_admin"];
+    const byId = new Map(parsed.categories.map((c) => [String(c.id), c]));
+    const categories = order.map((id) => {
+      const c = byId.get(id);
       return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Expected exactly 4 categories", parsed }),
+        id,
+        title: String(c?.title ?? id.replace("_", " ")),
+        subtitle: String(c?.subtitle ?? ""),
+        stepsCount: Number.isFinite(c?.stepsCount) ? c.stepsCount : 6,
       };
-    }
-
-    // Ensure each has required fields
-    const normalized = cats.map((c, idx) => ({
-      id: String(c?.id ?? `cat_${idx + 1}`),
-      title: String(c?.title ?? `Category ${idx + 1}`),
-      subtitle: String(c?.subtitle ?? ""),
-      stepsCount: Number.isFinite(c?.stepsCount) ? c.stepsCount : 6,
-    }));
+    });
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        headline: parsed?.headline ?? "Here are the main areas I heard.",
-        subhead: parsed?.subhead ?? "Pick one to start. We’ll take it step by step.",
-        categories: normalized,
+        headline: String(parsed.headline ?? "Here are the main areas I heard."),
+        subhead: String(parsed.subhead ?? "Pick one to start. We’ll take it step by step."),
+        categories,
       }),
     };
   } catch (err) {
