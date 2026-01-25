@@ -1,3 +1,19 @@
+function safeJsonParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+}
+
+function extractFirstJsonObject(text) {
+  if (typeof text !== "string") return null;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return safeJsonParse(text.slice(start, end + 1));
+}
+
 export async function handler(event) {
   try {
     if (event.httpMethod !== "POST") {
@@ -9,18 +25,20 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || "{}");
-    const { task, energy = "medium", sensory = "medium", stepsCount } = body;
+    const { task, energy = "medium", sensory = "medium", category, stepsCount } = body;
 
-    if (!task || typeof task !== "string") {
+    if (!task || typeof task !== "string" || !category?.title || !category?.id) {
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "task is required (string)" }),
+        body: JSON.stringify({ error: "Missing task or category (id/title required)." }),
       };
     }
 
-    const desired = Number.isFinite(stepsCount) ? Math.max(3, Math.min(10, stepsCount)) : 7;
+    // Clamp step count (and prefer the one passed from themes)
+    const n = Math.max(3, Math.min(10, Number(stepsCount) || 4));
 
+    // Use same provider config as themes.js for consistency
     const BASE_URL = process.env.TELUS_BASE_URL;
     const TOKEN = process.env.TELUS_ACCESS_TOKEN;
     const MODEL = process.env.TELUS_MODEL;
@@ -33,21 +51,34 @@ export async function handler(event) {
       };
     }
 
-    const system = `You are an accessibility-first assistant helping neurodivergent users.
-Be gentle, non-judgmental, concrete, and low-pressure.
-Return ONLY valid JSON. No markdown. No code fences.`;
+    const system =
+      "Return ONLY valid JSON. No markdown. No code fences. No extra text. No trailing commas.";
 
-    const user = `Task: "${task}"
-Energy level: ${energy} (low/medium/high)
-Sensory tolerance: ${sensory} (low/medium/high)
+    const user = `Task: """${task}"""
+Energy: ${energy} (low/medium/high)
+Sensory: ${sensory} (low/medium/high)
 
-Create EXACTLY ${desired} steps.
-Each step must be small and actionable.
-Each step detail must be 1 short sentence (max 20 words).
-Include restSuggestion only if energy is low and/or sensory is low, otherwise null.
+Selected category (ONLY generate steps for this):
+- id: ${category.id}
+- title: ${category.title}
+- subtitle: ${category.subtitle || ""}
+- iconKey: ${category.iconKey || ""}
 
-Return JSON in this exact shape, with NO extra keys:
-{"title":string,"steps":[{"title":string,"detail":string}],"restSuggestion":{"minutes":number,"reason":string}|null}`;
+Return JSON in EXACTLY this schema:
+{
+  "title": "string (short title for THIS category plan only)",
+  "restSuggestion": "string or null",
+  "steps": [
+    { "title": "string", "detail": "string" }
+  ]
+}
+
+Rules you must follow:
+- steps MUST be exactly ${n} items
+- every step MUST be ONLY about "${category.title}"
+- do NOT include other categories, other titles, or any extra arrays/keys
+- step titles should be short, concrete actions
+`;
 
     const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
@@ -61,24 +92,25 @@ Return JSON in this exact shape, with NO extra keys:
           { role: "system", content: system },
           { role: "user", content: user },
         ],
-        temperature: 0.3,
-        max_tokens: 1400,
+        temperature: 0.2,
+        max_tokens: 900,
       }),
     });
 
     const text = await resp.text();
-
     if (!resp.ok) {
-      return { statusCode: resp.status, headers: { "Content-Type": "application/json" }, body: text };
+      return {
+        statusCode: resp.status,
+        headers: { "Content-Type": "application/json" },
+        body: text,
+      };
     }
 
-    const data = JSON.parse(text);
-    const raw = data?.choices?.[0]?.message?.content ?? "";
+    const outer = safeJsonParse(text);
+    const raw = outer?.choices?.[0]?.message?.content ?? "";
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    const parsed = safeJsonParse(raw) || extractFirstJsonObject(raw);
+    if (!parsed || typeof parsed !== "object") {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
@@ -86,26 +118,38 @@ Return JSON in this exact shape, with NO extra keys:
       };
     }
 
-    // Hard normalize count if model drifted
-    const steps = Array.isArray(parsed?.steps) ? parsed.steps.slice(0, desired) : [];
-    while (steps.length < desired) {
-      steps.push({ title: `Step ${steps.length + 1}`, detail: "Take one small action." });
+    const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
+    if (steps.length !== n) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: `Steps count mismatch. Expected ${n}, got ${steps.length}.`,
+          raw: parsed,
+        }),
+      };
     }
+
+    // Normalize output
+    const normalized = {
+      title: String(parsed.title || category.title),
+      restSuggestion: parsed.restSuggestion == null ? null : String(parsed.restSuggestion),
+      steps: steps.map((s, i) => ({
+        title: String(s?.title ?? `Step ${i + 1}`),
+        detail: String(s?.detail ?? ""),
+      })),
+    };
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: parsed?.title ?? "Steps",
-        steps,
-        restSuggestion: parsed?.restSuggestion ?? null,
-      }),
+      body: JSON.stringify(normalized),
     };
-  } catch (err) {
+  } catch (e) {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Server error", details: String(err) }),
+      body: JSON.stringify({ error: "Internal error", message: String(e?.message || e) }),
     };
   }
 }

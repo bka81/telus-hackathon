@@ -106,15 +106,19 @@ Return exactly:
       };
     }
 
-    const allowed = new Set(iconKeys.split(","));
+    const allowed = new Set(iconKeys.split(",").map((s) => s.trim().toLowerCase()));
 
-    const normalized = parsed.categories.map((c, idx) => ({
-      id: String(c?.id ?? `cat_${idx + 1}`).replace(/[^a-zA-Z0-9_]/g, "_"),
-      title: String(c?.title ?? `Category ${idx + 1}`),
-      subtitle: String(c?.subtitle ?? ""),
-      stepsCount: Number.isFinite(c?.stepsCount) ? Math.max(3, Math.min(10, c.stepsCount)) : 6,
-      iconKey: allowed.has(String(c?.iconKey)) ? String(c.iconKey) : "misc",
-    }));
+    const normalized = parsed.categories.map((c, idx) => {
+      const iconKey = String(c?.iconKey ?? "").trim().toLowerCase();
+
+      return {
+        id: String(c?.id ?? `cat_${idx + 1}`).replace(/[^a-zA-Z0-9_]/g, "_"),
+        title: String(c?.title ?? `Category ${idx + 1}`),
+        subtitle: String(c?.subtitle ?? ""),
+        stepsCount: Number.isFinite(c?.stepsCount) ? Math.max(3, Math.min(10, Number(c.stepsCount))) : 6,
+        iconKey: allowed.has(iconKey) ? iconKey : "misc",
+      };
+    });
 
     return {
       statusCode: 200,
