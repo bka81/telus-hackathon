@@ -5,11 +5,19 @@ Unlinear is a **mobile-first AI task simplification tool** built for moments whe
 Instead of acting like a traditional to-do app (where you must already know the steps), Unlinear lets users type **messy, real-life thoughts** in their own words. The app uses AI to turn that input into **a few starting points** and then guides the user through **gentle, doable steps — one at a time**.
 
 ---
-## Live Demo (to be accessed on phone)
+## Live Demo (Mobile Recommended)
 
-<img width="651" height="659" alt="image" src="https://github.com/user-attachments/assets/31b2bce7-fbad-419d-898a-916192f425d9" />
-(https://unlinear.netlify.app/)
-*Unlinear is designed as a mobile-first experience. Viewing on a phone is recommended.*
+<a href="https://unlinear.netlify.app/" target="_blank">
+  <img
+    src="https://github.com/user-attachments/assets/31b2bce7-fbad-419d-898a-916192f425d9"
+    alt="Unlinear mobile demo QR"
+    width="280"
+  />
+</a>
+
+ **[Open Unlinear](https://unlinear.netlify.app/)**  
+*Unlinear is designed as a mobile-first experience. Please open this link on your phone for the best experience.*
+
 
 ---
 ## What it does (Demo flow)
