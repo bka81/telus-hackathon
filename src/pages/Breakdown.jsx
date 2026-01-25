@@ -114,6 +114,7 @@ export default function Breakdown() {
           <div className="pt-6 pb-10">
             <Link
               to="/focus"
+              state={{ tasks: tasks }}
               className="block w-full bg-green-900 text-white font-bold py-4 rounded-2xl text-center hover:bg-green-800 transition"
             >
               Start first step
