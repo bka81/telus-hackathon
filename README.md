@@ -7,7 +7,7 @@ Instead of acting like a traditional to-do app (where you must already know the 
 ---
 
 ## What it does (Demo flow)
-1. **Type what’s on your mind** (free-text input)
+1. **Type what’s on your mind** — or tap the **mic** to **speak instead of typing** 
 2. Set **Energy level** + **Sensory tolerance**
 3. Get a few **main focus areas** (cards) to choose from
 4. Enter **Focus Mode**: one step at a time with **Done → Next** (no timers, no pressure)
@@ -71,4 +71,7 @@ netlify dev
 ---
 
 ## Team
-(Add team members here)
+Manjari Prasad
+Asmi Pahwa
+Widad Modak
+Beyzanur Kuyuk
