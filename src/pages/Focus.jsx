@@ -1,8 +1,12 @@
+// Focus.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import focusBg from "../assets/images/focus-mode.jpg";
 
 const PROGRESS_KEY = "lastProgress_v1";
+
+//debug tool
+const DEV_VISUAL_TAG = true;
 
 function safeParse(str) {
   try {
@@ -51,7 +55,10 @@ export default function Focus() {
     return typeof s === "string" ? s : null;
   }, [location.state]);
 
-  const selectedCategory = useMemo(() => location.state?.selectedCategory || null, [location.state]);
+  const selectedCategory = useMemo(
+    () => location.state?.selectedCategory || null,
+    [location.state]
+  );
 
   const titleFromState = useMemo(() => {
     const t = location.state?.title;
@@ -65,17 +72,28 @@ export default function Focus() {
 
   const fallbackTasks = useMemo(
     () => [
-      { id: "s_1", text: "Find your insurance card", detail: "Check your wallet or your email for a digital copy.", done: false },
-      { id: "s_2", text: "Write down symptoms", detail: "Note when they started and any triggers you noticed.", done: false },
-      { id: "s_3", text: "Set an alarm", detail: "Give yourself a 10–15 minute reset before the next step.", done: false },
+      {
+        id: "s_1",
+        text: "Find your insurance card",
+        detail: "Check your wallet or your email for a digital copy.",
+        done: false,
+      },
+      {
+        id: "s_2",
+        text: "Write down symptoms",
+        detail: "Note when they started and any triggers you noticed.",
+        done: false,
+      },
+      {
+        id: "s_3",
+        text: "Set an alarm",
+        detail: "Give yourself a 10–15 minute reset before the next step.",
+        done: false,
+      },
     ],
     []
   );
 
-  // Load tasks with priority:
-  // 1) saved tasks for this category (resume)
-  // 2) tasks passed from Breakdown route state (fresh)
-  // 3) fallback
   const initialTasks = useMemo(() => {
     const catId = String(selectedCategory?.id || "");
     if (sigFromState && catId) {
@@ -93,7 +111,6 @@ export default function Focus() {
   const [showDetail, setShowDetail] = useState(false);
   const [isWiggling, setIsWiggling] = useState(false);
 
-  // Persist category progress (including full task list) to localStorage
   const persistCategory = (nextTasks, overrides = {}) => {
     if (!sigFromState || !selectedCategory?.id) return;
 
@@ -101,13 +118,13 @@ export default function Focus() {
     const doneSteps = countDone(nextTasks);
     const totalSteps = Number(selectedCategory?.stepsCount) || nextTasks.length;
 
-    const current = loadProgress(sigFromState) || { completedSteps: 0, totalSteps: 0, perCategory: {} };
+    const current =
+      loadProgress(sigFromState) || { completedSteps: 0, totalSteps: 0, perCategory: {} };
     if (!current.perCategory) current.perCategory = {};
 
     const prev = current.perCategory[catId] || {};
     const nextStatus =
-      overrides.status ||
-      (doneSteps >= nextTasks.length ? "completed" : prev.status || "active");
+      overrides.status || (doneSteps >= nextTasks.length ? "completed" : prev.status || "active");
 
     current.perCategory[catId] = {
       doneSteps,
@@ -116,9 +133,9 @@ export default function Focus() {
       tasks: nextTasks,
       title: overrides.title ?? prev.title ?? titleFromState ?? String(selectedCategory?.title || ""),
       restSuggestion: overrides.restSuggestion ?? prev.restSuggestion ?? null,
+      iconKey: overrides.iconKey ?? prev.iconKey ?? selectedCategory?.iconKey ?? null,
     };
 
-    // recompute global completedSteps from perCategory
     current.completedSteps = Object.values(current.perCategory).reduce(
       (sum, v) => sum + Number(v?.doneSteps || 0),
       0
@@ -127,16 +144,12 @@ export default function Focus() {
     saveProgress(sigFromState, current);
   };
 
-  // If user navigates to Focus with a DIFFERENT category, reload properly.
-  // IMPORTANT: We do NOT reset just because you came back from Breakdown;
-  // we prefer saved tasks for this category and keep them.
   useEffect(() => {
     const next = initialTasks;
     setDynamicTasks(next);
     setCurrentIndex(firstTodoIndex(next));
     setShowDetail(false);
 
-    // Ensure storage has an entry (so resume works even if they quit immediately)
     persistCategory(next, {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
@@ -161,28 +174,32 @@ export default function Focus() {
   const handleNext = () => {
     setShowDetail(false);
 
-    // Mark current as done
-    const nextTasks = dynamicTasks.map((t, idx) => (idx === currentIndex ? { ...t, done: true } : t));
+    const nextTasks = dynamicTasks.map((t, idx) =>
+      idx === currentIndex ? { ...t, done: true } : t
+    );
     setDynamicTasks(nextTasks);
 
-    // Persist immediately (so resume works even if they leave right now)
     persistCategory(nextTasks, {});
 
-    // If finished category, mark completed and go back
     if (countDone(nextTasks) >= nextTasks.length) {
-      persistCategory(nextTasks, { status: "completed" });
-      navigate("/breakdown");
+      persistCategory(nextTasks, { status: "completed", iconKey: selectedCategory?.iconKey ?? null });
+
+      navigate("/reflect", {
+        state: {
+          sig: sigFromState,
+          lastCompletedCatId: String(selectedCategory?.id || ""),
+        },
+      });
+
       return;
     }
 
-    // Move to next todo
     setCurrentIndex(firstTodoIndex(nextTasks));
   };
 
   const handleComeBackLater = () => {
     setShowDetail(false);
 
-    // Move current task to end (keep it not-done)
     const taskToMove = dynamicTasks[currentIndex];
     const rest = dynamicTasks.filter((_, idx) => idx !== currentIndex);
     const nextTasks = [...rest, taskToMove];
@@ -190,7 +207,6 @@ export default function Focus() {
     setDynamicTasks(nextTasks);
     setCurrentIndex(firstTodoIndex(nextTasks));
 
-    // Persist order change
     persistCategory(nextTasks, {});
   };
 
@@ -213,7 +229,7 @@ export default function Focus() {
           className="h-11 px-4 rounded-2xl bg-white/70 border border-white/80 shadow-sm text-slate-700 font-semibold"
           type="button"
         >
-          ← Categories
+          ← Back to Categories
         </button>
 
         <div className="text-slate-700 font-semibold bg-white/60 border border-white/80 px-3 py-2 rounded-2xl shadow-sm">
@@ -222,7 +238,7 @@ export default function Focus() {
       </div>
 
       <div className="w-full flex flex-col items-center justify-start pt-8 px-6 z-10 min-h-screen">
-        <div className="w-full max-w-md bg-white/40 h-2.5 rounded-full mb-8 shadow-sm">
+        <div className="w-full max-w-lg bg-white/40 h-2.5 rounded-full mb-8 shadow-sm">
           <div
             className="bg-[#5072A7] h-2.5 rounded-full transition-all duration-500"
             style={{ width: `${progressPct}%` }}
@@ -230,12 +246,13 @@ export default function Focus() {
         </div>
 
         {titleFromState ? (
-          <div className="w-full max-w-md text-center mb-6">
+          <div className="w-full max-w-lg text-center mb-6">
             <div className="text-slate-700 font-semibold">{titleFromState}</div>
           </div>
         ) : null}
 
-        <div className="w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
+        {/* CARD: make wider on phone + slightly reduce side padding */}
+        <div className="w-full max-w-xl bg-white rounded-[2.5rem] px-8 py-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
           <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-sm">
             Step {Math.min(doneCount + 1, totalCount)} of {totalCount}
           </p>
@@ -271,12 +288,25 @@ export default function Focus() {
           </div>
 
           <div className="flex flex-col gap-3">
+            {/* PRIMARY BUTTON: bigger visually + allow long label to fit */}
             <button
               onClick={handleNext}
-              className="w-full py-5 bg-[#DEE5D4] text-slate-700 rounded-full font-bold text-xl shadow-lg hover:bg-[#ced9c1] transition-transform active:scale-95"
               type="button"
+              className={[
+                "w-full rounded-full shadow-lg transition-transform active:scale-95",
+                "bg-[#DEE5D4] hover:bg-[#ced9c1] text-slate-700",
+                // make it feel "longer": more horizontal padding + min-height
+                "px-8 py-6 min-h-[64px]",
+                // slightly smaller text so Finish label fits; keep bold
+                "font-extrabold text-lg sm:text-xl",
+                // keep label on one line on most phones; wrap only if absolutely needed
+                "whitespace-nowrap",
+                // optional: tighter tracking
+                "tracking-tight",
+            
+              ].join(" ")}
             >
-              {doneCount === totalCount - 1 ? "Finish Category →" : "Done →"}
+              {doneCount === totalCount - 1 ? "Finish & Get Summary →" : "Done →"}
             </button>
 
             <button
@@ -289,7 +319,9 @@ export default function Focus() {
           </div>
         </div>
 
-        <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">Just focus on this one thing.</p>
+        <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">
+          Just focus on this one thing.
+        </p>
       </div>
     </div>
   );
