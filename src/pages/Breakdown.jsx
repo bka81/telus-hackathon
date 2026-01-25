@@ -2,6 +2,34 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import bgImage from "../assets/images/task-breakdown.jpg";
 
+import iconChecklist from "../assets/images/01_clipboard_checklist.png";
+import iconBulb from "../assets/images/02_lightbulb_idea_dark.png";
+import iconHome from "../assets/images/03_home.png";
+import iconBed from "../assets/images/04_sleep_bed.png";
+import iconHeart from "../assets/images/05_health_heart.png";
+import iconPlant from "../assets/images/06_plant_growth.png";
+import iconMail from "../assets/images/07_mail_envelope.png";
+import iconCalendar from "../assets/images/08_calendar_check.png";
+import iconDumbbell from "../assets/images/09_dumbbell_fitness.png";
+import iconFood from "../assets/images/10_food_plate.png";
+import iconBags from "../assets/images/11_shopping_bags.png";
+import iconBriefcase from "../assets/images/12_briefcase.png";
+
+const ICONS_BY_TYPE = {
+  planning: iconChecklist,
+  ideas: iconBulb,
+  home: iconHome,
+  sleep_rest: iconBed,
+  growth_selfcare: iconPlant,
+  health_medical: iconHeart,
+  communication: iconMail,
+  schedule_admin: iconCalendar,
+  activity: iconDumbbell,
+  food_nutrition: iconFood,
+  shopping_errands: iconBags,
+  travel_career: iconBriefcase,
+};
+
 const INTAKE_KEY = "lastIntake_v1";
 const THEMES_KEY = "lastThemes_v1";
 
