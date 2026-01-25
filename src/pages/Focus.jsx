@@ -387,10 +387,6 @@ export default function Focus() {
           </div>
         </div>
 
-        <p className="mt-7 sm:mt-8 text-slate-600 font-medium italic drop-shadow-sm text-sm sm:text-base">
-          Just focus on this one thing.
-        </p>
-
         {/* Optional dev visual tag (disabled by default styling) */}
         {DEV_VISUAL_TAG ? null : null}
       </div>

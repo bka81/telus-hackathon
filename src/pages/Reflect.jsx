@@ -230,10 +230,6 @@ export default function Reflect() {
               Back to Categories
             </button>
           </section>
-
-          <footer className="rf__footer">
-            <div className="rf__hint">Just focus on this one thing.</div>
-          </footer>
         </div>
       </div>
 
