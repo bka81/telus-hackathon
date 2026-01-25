@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useLayoutEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import landingBg from "../assets/images/landing.jpg";
+import logo from "../assets/images/logo.png";
 
 export default function Welcome() {
   const navigate = useNavigate();
@@ -57,13 +58,9 @@ export default function Welcome() {
         <section className="welcome__content" aria-label="Welcome content">
           <header className="welcome__header">
             <div className="welcome__brandRow">
-              <span className="welcome__leaf" aria-hidden="true">
-                ❦
-              </span>
+              {/* CHANGED: logo is now its own element (not inside welcome__leaf) */}
+              <img src={logo} alt="Unlinear logo" className="welcome__logo" />
               <h1 className="welcome__brand">Unlinear</h1>
-              <span className="welcome__leaf" aria-hidden="true">
-                ❦
-              </span>
             </div>
 
             <p className="welcome__tagline">Tasks, made calmer.</p>
@@ -142,14 +139,13 @@ export default function Welcome() {
               onClick={() => {
                 const intake = {
                   task: focus.trim(),
-                  energy: energyLabel.toLowerCase(),   // "low" | "medium" | "high"
+                  energy: energyLabel.toLowerCase(), // "low" | "medium" | "high"
                   sensory: sensoryLabel.toLowerCase(), // "low" | "medium" | "high"
                 };
 
                 localStorage.setItem("lastIntake_v1", JSON.stringify(intake));
                 navigate("/breakdown", { state: intake });
               }}
-
               disabled={!focus.trim()}
               aria-disabled={!focus.trim()}
             >
@@ -237,13 +233,21 @@ export default function Welcome() {
           padding-top: 15px;
         }
 
-        .welcome__header{ margin-top: 0; }
+        .welcome__header{ margin-top: 0;}
 
         .welcome__brandRow{
           display: inline-flex;
           align-items: center;
-          gap: 12px;
           margin-bottom: 6px;
+        }
+
+        /* ADDED: logo sizing + alignment */
+        .welcome__logo{
+          height: 70px;
+          width: auto;
+          display: block;
+          transform: translateY(1px);
+          margin-right: -12px;
         }
 
         .welcome__leaf{
@@ -378,7 +382,6 @@ export default function Welcome() {
         border: none;
         }
 
-
         .welcome__range::-webkit-slider-thumb{
             -webkit-appearance: none;
             appearance: none;
@@ -430,3 +433,4 @@ export default function Welcome() {
     </main>
   );
 }
+
