@@ -63,7 +63,7 @@ netlify dev
 
 ---
 
-## Notes (Hackathon-ready)
+## Notes 
 - User input is only used to generate the breakdown.
 - API keys are stored server-side via serverless functions.
 - This is a prototype focused on accessibility and cognitive-load reduction.

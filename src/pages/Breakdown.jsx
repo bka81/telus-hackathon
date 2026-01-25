@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import bgImage from "../assets/images/task-breakdown.jpg";
 
+// ✅ ADD: loading gif (make sure the path matches where you saved it)
+import loadingGif from "../assets/images/loading.gif";
+
 // 19 icons
 import iconChecklist from "../assets/images/01_clipboard_checklist.png";
 import iconBulb from "../assets/images/02_lightbulb_idea_dark.png";
@@ -408,10 +411,10 @@ export default function Breakdown() {
 
           <section className="bd__panel" aria-label="Categories">
             {loading ? (
-              <div className="bd__grid">
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="bd__skeleton" />
-                ))}
+              // ✅ REPLACE skeletons with the loading gif
+              <div className="bd__loadingWrap" role="status" aria-live="polite" aria-label="Loading categories">
+                <img src={loadingGif} alt="Loading" className="bd__loadingGif" />
+                <div className="bd__loadingText">Loading your focus cards…</div>
               </div>
             ) : error ? (
               <div className="bd__error">
@@ -422,7 +425,15 @@ export default function Breakdown() {
               </div>
             ) : (
               <>
-                {picking && <div className="bd__status">Creating steps…</div>}
+                {/* ✅ Replace "Creating steps..." text with overlay gif */}
+                {picking && (
+                  <div className="bd__overlay" role="status" aria-live="polite">
+                    <div className="bd__overlayCard">
+                      <img src={loadingGif} alt="Creating steps" className="bd__overlayGif" />
+                      <div className="bd__overlayText">Creating steps…</div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="bd__grid">
                   {visibleCategories.map((c, idx) => {
@@ -630,6 +641,7 @@ export default function Breakdown() {
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
           padding: 16px;
+          position: relative; /* ✅ allow overlay to sit on top nicely */
         }
 
         .bd__status{
@@ -848,6 +860,70 @@ export default function Breakdown() {
           .bd__grid > .bd__card:last-child:nth-child(odd){
             max-width: calc((100% - 12px) / 2);
           }
+        }
+          
+        .bd__loadingWrap{
+          width: 100%;
+          min-height: 360px;   /* was 240px */
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;           /* was 10px */
+          padding: 24px 10px;
+        }
+
+        .bd__loadingGif{
+          width: 340px;        /* was 220px */
+          max-width: 95%;      /* was 85% */
+          height: auto;
+          border-radius: 22px; /* slightly nicer */
+          box-shadow: 0 18px 44px rgba(27,34,46,0.14);
+        }
+
+        .bd__loadingText{
+          font-size: 13px;     /* was 12px */
+          font-weight: 750;
+          color: rgba(27,34,46,0.60);
+        }
+
+
+        /* ✅ ADD: Overlay styles (for when user clicks a card and steps are being created) */
+        .bd__overlay{
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          background: rgba(255,255,255,0.45);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+        }
+
+        .bd__overlayCard{
+          width: min(360px, 92vw);
+          border-radius: 26px;
+          background: rgba(255,255,255,0.82);
+          border: 1px solid rgba(255,255,255,0.90);
+          box-shadow: 0 22px 70px rgba(27,34,46,0.16);
+          padding: 16px;
+          text-align: center;
+        }
+
+        .bd__overlayGif{
+          width: 240px;
+          max-width: 100%;
+          height: auto;
+          border-radius: 18px;
+        }
+
+        .bd__overlayText{
+          margin-top: 10px;
+          font-size: 12px;
+          font-weight: 800;
+          color: rgba(27,34,46,0.62);
         }
       `}</style>
     </main>
