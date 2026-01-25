@@ -5,7 +5,7 @@ import focusBg from "../assets/images/focus-mode.jpg";
 
 const PROGRESS_KEY = "lastProgress_v1";
 
-//debug tool
+// debug tool (kept, but NOT used for styling to avoid “pink outline” issues)
 const DEV_VISUAL_TAG = true;
 
 function safeParse(str) {
@@ -131,7 +131,11 @@ export default function Focus() {
       totalSteps,
       status: nextStatus,
       tasks: nextTasks,
-      title: overrides.title ?? prev.title ?? titleFromState ?? String(selectedCategory?.title || ""),
+      title:
+        overrides.title ??
+        prev.title ??
+        titleFromState ??
+        String(selectedCategory?.title || ""),
       restSuggestion: overrides.restSuggestion ?? prev.restSuggestion ?? null,
       iconKey: overrides.iconKey ?? prev.iconKey ?? selectedCategory?.iconKey ?? null,
     };
@@ -182,7 +186,10 @@ export default function Focus() {
     persistCategory(nextTasks, {});
 
     if (countDone(nextTasks) >= nextTasks.length) {
-      persistCategory(nextTasks, { status: "completed", iconKey: selectedCategory?.iconKey ?? null });
+      persistCategory(nextTasks, {
+        status: "completed",
+        iconKey: selectedCategory?.iconKey ?? null,
+      });
 
       navigate("/reflect", {
         state: {
@@ -210,8 +217,23 @@ export default function Focus() {
     persistCategory(nextTasks, {});
   };
 
+  // Mobile-safe button label: short on very small screens, full on >= sm
+  const PrimaryLabel = ({ isLast }) => (
+    <>
+      <span className="block sm:hidden">{isLast ? "Finish →" : "Done →"}</span>
+      <span className="hidden sm:block">
+        {isLast ? "Finish & Get Summary →" : "Done →"}
+      </span>
+    </>
+  );
+
+  const isLastStep = doneCount === totalCount - 1;
+
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center font-sans overflow-hidden">
+    <div
+      className="relative min-h-screen w-full flex flex-col items-center font-sans overflow-hidden"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
       <div
         className="fixed inset-0 -z-10 w-full h-full"
         style={{
@@ -222,23 +244,42 @@ export default function Focus() {
         }}
       />
 
-      {/* top bar */}
-      <div className="w-full flex items-center justify-between px-6 pt-6 z-10">
+      {/* TOP BAR — compact + no wrapping on small phones */}
+      <div className="w-full flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 z-10 gap-2">
         <button
           onClick={goBackToBreakdown}
-          className="h-11 px-4 rounded-2xl bg-white/70 border border-white/80 shadow-sm text-slate-700 font-semibold"
+          className={[
+            "h-9 sm:h-11",
+            "px-3 sm:px-4",
+            "rounded-xl sm:rounded-2xl",
+            "bg-white/70 border border-white/80 shadow-sm",
+            "text-slate-700 text-sm sm:text-base font-semibold",
+            "whitespace-nowrap",
+            // remove any accidental outlines/rings
+            "outline-none focus:outline-none focus:ring-0",
+          ].join(" ")}
           type="button"
         >
-          ← Back to Categories
+          ← Categories
         </button>
 
-        <div className="text-slate-700 font-semibold bg-white/60 border border-white/80 px-3 py-2 rounded-2xl shadow-sm">
+        <div
+          className={[
+            "text-slate-700 font-semibold",
+            "text-sm sm:text-base",
+            "bg-white/60 border border-white/80",
+            "px-3 py-1.5 sm:px-3 sm:py-2",
+            "rounded-xl sm:rounded-2xl shadow-sm",
+            "whitespace-nowrap",
+          ].join(" ")}
+        >
           {doneCount}/{totalCount} done
         </div>
       </div>
 
-      <div className="w-full flex flex-col items-center justify-start pt-8 px-6 z-10 min-h-screen">
-        <div className="w-full max-w-lg bg-white/40 h-2.5 rounded-full mb-8 shadow-sm">
+      <div className="w-full flex flex-col items-center justify-start pt-6 sm:pt-8 px-4 sm:px-6 z-10 min-h-screen">
+        {/* Progress bar wrapper */}
+        <div className="w-full max-w-lg bg-white/40 h-2.5 rounded-full mb-6 sm:mb-8 shadow-sm">
           <div
             className="bg-[#5072A7] h-2.5 rounded-full transition-all duration-500"
             style={{ width: `${progressPct}%` }}
@@ -246,36 +287,53 @@ export default function Focus() {
         </div>
 
         {titleFromState ? (
-          <div className="w-full max-w-lg text-center mb-6">
-            <div className="text-slate-700 font-semibold">{titleFromState}</div>
+          <div className="w-full max-w-lg text-center mb-5 sm:mb-6 px-1">
+            <div className="text-slate-700 font-semibold text-sm sm:text-base">
+              {titleFromState}
+            </div>
           </div>
         ) : null}
 
-        {/* CARD: make wider on phone + slightly reduce side padding */}
-        <div className="w-full max-w-xl bg-white rounded-[2.5rem] px-8 py-10 shadow-xl text-center space-y-8 animate-in zoom-in duration-300">
-          <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-sm">
+        {/* CARD — fills width nicely on small phones, still capped */}
+        <div
+          className={[
+            "w-full",
+            "max-w-[420px] sm:max-w-lg",
+            "bg-white",
+            "rounded-[2rem] sm:rounded-[2.5rem]",
+            "px-7 py-8 sm:px-10 sm:py-10",
+            "shadow-xl",
+            "text-center",
+            "space-y-7 sm:space-y-8",
+            "animate-in zoom-in duration-300",
+          ].join(" ")}
+        >
+          <p className="text-[#8EACCD] font-bold tracking-widest uppercase text-xs sm:text-sm">
             Step {Math.min(doneCount + 1, totalCount)} of {totalCount}
           </p>
 
           <div className="space-y-4">
-            <h2 className="text-3xl font-semibold text-slate-800 leading-tight">
+            <h2 className="text-2xl sm:text-3xl font-semibold text-slate-800 leading-tight">
               {currentTask?.text ?? ""}
             </h2>
 
             <button
               onClick={() => setShowDetail((v) => !v)}
-              className="flex items-center justify-center gap-2 mx-auto text-[#8EACCD] hover:text-[#5072A7] transition-all group"
+              className={[
+                "flex items-center justify-center gap-2 mx-auto",
+                "text-[#8EACCD] hover:text-[#5072A7] transition-all group",
+                "outline-none focus:outline-none focus:ring-0",
+              ].join(" ")}
               type="button"
             >
               <span
                 className={`text-2xl transition-all duration-300 inline-block
                 group-hover:rotate-12 group-hover:scale-110
-                ${isWiggling ? "animate-bounce translate-x-2 text-3xl" : ""}
-              `}
+                ${isWiggling ? "animate-bounce translate-x-2 text-3xl" : ""}`}
               >
-                🪄
+                ✦
               </span>
-              <span className="text-sm font-bold uppercase tracking-wider">
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider">
                 {showDetail ? "Hide hint" : "Tap for hint"}
               </span>
             </button>
@@ -288,30 +346,40 @@ export default function Focus() {
           </div>
 
           <div className="flex flex-col gap-3">
-            {/* PRIMARY BUTTON: bigger visually + allow long label to fit */}
+            {/* PRIMARY BUTTON — no overflow, no weird outline, scales perfectly */}
             <button
               onClick={handleNext}
               type="button"
               className={[
-                "w-full rounded-full shadow-lg transition-transform active:scale-95",
-                "bg-[#DEE5D4] hover:bg-[#ced9c1] text-slate-700",
-                // make it feel "longer": more horizontal padding + min-height
-                "px-8 py-6 min-h-[64px]",
-                // slightly smaller text so Finish label fits; keep bold
-                "font-extrabold text-lg sm:text-xl",
-                // keep label on one line on most phones; wrap only if absolutely needed
-                "whitespace-nowrap",
-                // optional: tighter tracking
+                "w-full",
+                "rounded-full",
+                "bg-[#DEE5D4] hover:bg-[#ced9c1]",
+                "text-slate-700",
+                "shadow-lg",
+                "transition-transform active:scale-95",
+                "min-h-[56px] sm:min-h-[64px]",
+                "px-6 sm:px-8",
+                "py-4 sm:py-6",
+                "font-extrabold",
+                "text-base sm:text-lg",
                 "tracking-tight",
-            
+                // critical: keep single-line; we provide short label on small screens anyway
+                "whitespace-nowrap",
+                // remove focus ring/outline that causes “pink border” look
+                "outline-none focus:outline-none focus:ring-0 focus-visible:ring-0",
               ].join(" ")}
             >
-              {doneCount === totalCount - 1 ? "Finish & Get Summary →" : "Done →"}
+              <PrimaryLabel isLast={isLastStep} />
             </button>
 
             <button
               onClick={handleComeBackLater}
-              className="text-slate-400 text-xs font-bold uppercase tracking-widest hover:text-slate-600 transition-colors"
+              className={[
+                "text-slate-400 text-[11px] sm:text-xs",
+                "font-bold uppercase tracking-widest",
+                "hover:text-slate-600 transition-colors",
+                "outline-none focus:outline-none focus:ring-0",
+              ].join(" ")}
               type="button"
             >
               ↻ Come back to this later
@@ -319,9 +387,12 @@ export default function Focus() {
           </div>
         </div>
 
-        <p className="mt-8 text-slate-600 font-medium italic drop-shadow-sm">
+        <p className="mt-7 sm:mt-8 text-slate-600 font-medium italic drop-shadow-sm text-sm sm:text-base">
           Just focus on this one thing.
         </p>
+
+        {/* Optional dev visual tag (disabled by default styling) */}
+        {DEV_VISUAL_TAG ? null : null}
       </div>
     </div>
   );

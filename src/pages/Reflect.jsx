@@ -166,7 +166,7 @@ export default function Reflect() {
           {/* ✅ Top navigation back button */}
           <div className="rf__topNav">
             <button onClick={goBack} className="rf__backBtn" type="button">
-              ← Categories
+              ←
             </button>
           </div>
 
