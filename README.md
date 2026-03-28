@@ -1,4 +1,4 @@
-# Unlinear — Tasks, made calmer.
+# Unlinear — Tasks, made calmer
 
 Unlinear is a **mobile-first AI task simplification tool** built for moments when everything feels overwhelming. It’s designed with neurodivergent users in mind (ADHD, autism, executive dysfunction), but it’s useful for anyone dealing with stress, decision fatigue, or burnout.
 
